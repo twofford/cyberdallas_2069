@@ -1,0 +1,207 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum CampaignRole {
+  OWNER
+  MEMBER
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  campaignMemberships CampaignMembership[]
+  acceptedCampaignInvites CampaignInvite[] @relation("AcceptedInvites")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model Campaign {
+  id         String      @id @default(cuid())
+  name       String
+  characters Character[]
+  memberships CampaignMembership[]
+  invites    CampaignInvite[]
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+}
+
+model Character {
+  id           String  @id @default(cuid())
+  name         String
+  isPublic     Boolean @default(false)
+  speed        Int     @default(30)
+  hitPoints    Int     @default(5)
+  brawn        Int     @default(0)
+  charm        Int     @default(0)
+  intelligence Int     @default(0)
+  reflexes     Int     @default(0)
+  tech         Int     @default(0)
+  luck         Int     @default(0)
+
+  campaignId String?
+  campaign   Campaign? @relation(fields: [campaignId], references: [id])
+
+  skills       CharacterSkill[]
+  cybernetics  CharacterCybernetic[]
+  weapons      CharacterWeapon[]
+  items        CharacterItem[]
+  vehicles     CharacterVehicle[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model CampaignMembership {
+  userId     String
+  campaignId String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  campaign   Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  role       CampaignRole @default(MEMBER)
+  createdAt  DateTime @default(now())
+
+  @@id([userId, campaignId])
+}
+
+model CampaignInvite {
+  id               String   @id @default(cuid())
+  token            String   @unique
+  email            String
+  campaignId       String
+  campaign         Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  expiresAt        DateTime
+  acceptedAt       DateTime?
+  acceptedByUserId String?
+  acceptedByUser   User?    @relation("AcceptedInvites", fields: [acceptedByUserId], references: [id])
+  createdAt        DateTime @default(now())
+
+  @@index([campaignId])
+  @@index([email])
+}
+
+model CharacterSkill {
+  id          String    @id @default(cuid())
+  characterId String
+  character   Character @relation(fields: [characterId], references: [id])
+  name        String
+  level       Int
+
+  @@unique([characterId, name])
+}
+
+model Cybernetic {
+  id               String @id @default(cuid())
+  name             String
+  shortDescription String
+  longDescription  String
+  price            Int
+  batteryLife      Int
+
+  characters CharacterCybernetic[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Weapon {
+  id               String @id @default(cuid())
+  name             String
+  price            Int
+  weight           Int
+  maxRange         Int
+  maxAmmoCount     Int
+  type             WeaponType
+  condition        Int
+  shortDescription String
+  longDescription  String
+
+  characters CharacterWeapon[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+enum WeaponType {
+  RANGED
+  MELEE
+}
+
+model Item {
+  id               String @id @default(cuid())
+  name             String
+  price            Int
+  weight           Int
+  type             ItemType
+  shortDescription String
+  longDescription  String
+
+  characters CharacterItem[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+enum ItemType {
+  GENERAL
+  CYBERDECK
+  CONSUMABLE
+  AMMO
+  OTHER
+}
+
+model Vehicle {
+  id               String @id @default(cuid())
+  name             String
+  price            Int
+  shortDescription String
+  longDescription  String
+  speed            Int
+  armor            Int
+
+  characters CharacterVehicle[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model CharacterCybernetic {
+  characterId String
+  cyberneticId String
+  character   Character  @relation(fields: [characterId], references: [id])
+  cybernetic  Cybernetic @relation(fields: [cyberneticId], references: [id])
+
+  @@id([characterId, cyberneticId])
+}
+
+model CharacterWeapon {
+  characterId String
+  weaponId    String
+  character   Character @relation(fields: [characterId], references: [id])
+  weapon      Weapon    @relation(fields: [weaponId], references: [id])
+
+  @@id([characterId, weaponId])
+}
+
+model CharacterItem {
+  characterId String
+  itemId      String
+  character   Character @relation(fields: [characterId], references: [id])
+  item        Item      @relation(fields: [itemId], references: [id])
+
+  @@id([characterId, itemId])
+}
+
+model CharacterVehicle {
+  characterId String
+  vehicleId   String
+  character   Character @relation(fields: [characterId], references: [id])
+  vehicle     Vehicle   @relation(fields: [vehicleId], references: [id])
+
+  @@id([characterId, vehicleId])
+}

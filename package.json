@@ -1,0 +1,43 @@
+{
+  "name": "cyberdallas-2069",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "db:migrate": "prisma migrate dev",
+    "db:push": "prisma db push",
+    "db:studio": "prisma studio",
+    "db:seed": "prisma db seed",
+    "email:test-invite": "tsx src/scripts/sendTestInvite.ts",
+    "e2e:devserver": "tsx src/scripts/e2eDevServer.ts",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:e2e": "playwright test",
+    "lint": "next lint"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.4.1",
+    "graphql": "^16.11.0",
+    "graphql-yoga": "^5.16.0",
+    "next": "^15.2.0",
+    "nodemailer": "^8.0.1",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.58.2",
+    "@types/node": "^22.13.4",
+    "@types/react": "^19.0.10",
+    "@types/react-dom": "^19.0.4",
+    "prisma": "^6.4.1",
+    "tsx": "^4.20.5",
+    "typescript": "^5.7.3",
+    "vitest": "^2.1.9"
+  },
+  "prisma": {
+    "seed": "tsx prisma/seed.ts"
+  }
+}
