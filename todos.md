@@ -32,3 +32,21 @@ Append new todos to the bottom. When a todo is completed, check it off (do not r
 
 - [ ] Add /auth login page + redirect-to-dashboard flow
 - [x] Add /auth login page + redirect-to-dashboard flow
+
+- [x] Fix login/register forms sharing state
+
+- [x] Ignore Next/test build artifacts in git
+
+- [x] Add baseline global UI styling
+
+- [x] Tune global UI to terminal look
+
+- [x] Add terminal-style prompt prefixes
+
+- [x] Style code blocks like terminal
+
+- [x] Make UI borders angular
+
+- [x] Add extra terminal UI polish
+
+- [ ] After each completed task, append Prompt/Response to prompts.md

@@ -75,11 +75,22 @@ test('accept invite hides button after success', async ({ page }) => {
   await page.goto(`/invite?token=${encodeURIComponent(inviteToken)}`);
   await expect(page.getByText('Invite token detected.')).toBeVisible();
 
-  // Invitee registers on the invite page.
-  const registerForm = page.locator('form', { has: page.getByRole('heading', { name: 'Register' }) });
-  await registerForm.getByLabel('Email').fill(inviteeEmail);
-  await registerForm.getByLabel('Password').fill(password);
-  await registerForm.getByRole('button', { name: 'Register' }).click();
+  // Invitee registers (via GraphQL) then reloads the invite page.
+  await graphqlPost<{ register: { user: { id: string } } }>({
+    request: page.request,
+    query: /* GraphQL */ `
+      mutation Register($email: String!, $password: String!) {
+        register(email: $email, password: $password) {
+          user {
+            id
+          }
+        }
+      }
+    `,
+    variables: { email: inviteeEmail, password },
+  });
+
+  await page.reload();
   await expect(page.getByText(`Signed in as: ${inviteeEmail}`)).toBeVisible();
 
   // Accept invite.

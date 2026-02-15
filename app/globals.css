@@ -1,0 +1,298 @@
+/* Minimal global styling (no custom palette): relies on CSS system colors. */
+
+:root {
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body[data-ui='cyberdallas'] {
+  margin: 0;
+  background: Canvas;
+  color: CanvasText;
+  line-height: 1.5;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+  font-size: 14px;
+}
+
+body[data-ui='cyberdallas'] ::selection {
+  background: Highlight;
+  color: HighlightText;
+}
+
+body[data-ui='cyberdallas'] main {
+  max-width: 1240px;
+  margin: 0 auto;
+  padding: 24px 18px;
+}
+
+body[data-ui='cyberdallas'] h1 {
+  margin: 0 0 14px;
+  font-size: 20px;
+  letter-spacing: 0.02em;
+}
+
+body[data-ui='cyberdallas'] h1::before {
+  content: '$ ';
+  opacity: 0.7;
+}
+
+body[data-ui='cyberdallas'] h2 {
+  margin: 0 0 10px;
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  opacity: 0.9;
+}
+
+body[data-ui='cyberdallas'] h2::before {
+  content: '> ';
+  opacity: 0.7;
+}
+
+body[data-ui='cyberdallas'] h3 {
+  margin: 0 0 10px;
+  font-size: 13px;
+}
+
+body[data-ui='cyberdallas'] h3::before {
+  content: '> ';
+  opacity: 0.7;
+}
+
+body[data-ui='cyberdallas'] section {
+  margin-top: 18px;
+  padding: 14px;
+  border: 1px solid color-mix(in srgb, CanvasText 25%, transparent);
+  border-radius: 0;
+}
+
+body[data-ui='cyberdallas'] section > h2 {
+  display: flex;
+  align-items: baseline;
+}
+
+body[data-ui='cyberdallas'] section > h2::after {
+  content: '';
+  flex: 1;
+  margin-left: 12px;
+  border-bottom: 1px dashed color-mix(in srgb, CanvasText 30%, transparent);
+  transform: translateY(-0.25em);
+  opacity: 0.9;
+}
+
+body[data-ui='cyberdallas'] p {
+  margin: 8px 0;
+}
+
+body[data-ui='cyberdallas'] ul {
+  margin: 8px 0 0;
+  padding-left: 0;
+  list-style: none;
+}
+
+body[data-ui='cyberdallas'] li {
+  position: relative;
+  padding-left: 1.25rem;
+  margin: 4px 0;
+}
+
+body[data-ui='cyberdallas'] li::before {
+  content: '-';
+  position: absolute;
+  left: 0;
+  opacity: 0.7;
+}
+
+body[data-ui='cyberdallas'] a {
+  color: LinkText;
+}
+
+body[data-ui='cyberdallas'] code {
+  padding: 0.12em 0.35em;
+  border-radius: 0;
+  border: 1px solid color-mix(in srgb, CanvasText 25%, transparent);
+  background: color-mix(in srgb, CanvasText 8%, Canvas);
+}
+
+body[data-ui='cyberdallas'] pre {
+  margin: 10px 0 0;
+  padding: 12px 14px;
+  border-radius: 0;
+  border: 1px solid color-mix(in srgb, CanvasText 25%, transparent);
+  background: color-mix(in srgb, CanvasText 8%, Canvas);
+  overflow: auto;
+}
+
+body[data-ui='cyberdallas'] pre code {
+  padding: 0;
+  border: none;
+  background: transparent;
+}
+
+body[data-ui='cyberdallas'] label {
+  display: grid;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+body[data-ui='cyberdallas'] input {
+  font: inherit;
+  padding: 10px 12px;
+  border-radius: 0;
+  border: 1px solid color-mix(in srgb, CanvasText 25%, transparent);
+  background: Canvas;
+  color: CanvasText;
+  caret-color: Highlight;
+}
+
+body[data-ui='cyberdallas'] select {
+  font: inherit;
+  padding: 10px 12px;
+  border-radius: 0;
+  border: 1px solid color-mix(in srgb, CanvasText 25%, transparent);
+  background: Canvas;
+  color: CanvasText;
+  color-scheme: dark;
+}
+
+body[data-ui='cyberdallas'] option,
+body[data-ui='cyberdallas'] optgroup {
+  font: inherit;
+  background: Canvas;
+  color: CanvasText;
+}
+
+body[data-ui='cyberdallas'] input:focus {
+  outline: 2px solid Highlight;
+  outline-offset: 1px;
+}
+
+body[data-ui='cyberdallas'] select:focus {
+  outline: 2px solid Highlight;
+  outline-offset: 1px;
+}
+
+body[data-ui='cyberdallas'] button {
+  font: inherit;
+  padding: 10px 12px;
+  margin-top: 10px;
+  border-radius: 0;
+  border: 1px solid color-mix(in srgb, CanvasText 30%, transparent);
+  background: Canvas;
+  color: CanvasText;
+  cursor: pointer;
+}
+
+body[data-ui='cyberdallas'] button::before {
+  content: '[ ';
+  opacity: 0.75;
+}
+
+body[data-ui='cyberdallas'] button::after {
+  content: ' ]';
+  opacity: 0.75;
+}
+
+body[data-ui='cyberdallas'] button[data-icon-button='true'] {
+  border: 0;
+  background: transparent;
+  color: CanvasText;
+  opacity: 0.8;
+}
+
+body[data-ui='cyberdallas'] button[data-icon-button='true']::before,
+body[data-ui='cyberdallas'] button[data-icon-button='true']::after {
+  content: '';
+  display: none;
+}
+
+body[data-ui='cyberdallas'] button[data-icon-button='true']:hover:enabled {
+  opacity: 1;
+}
+
+body[data-ui='cyberdallas'] button:hover:enabled {
+  background: color-mix(in srgb, CanvasText 10%, Canvas);
+}
+
+body[data-ui='cyberdallas'] button:focus-visible {
+  outline: 2px solid Highlight;
+  outline-offset: 1px;
+}
+
+body[data-ui='cyberdallas'] button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+body[data-ui='cyberdallas'] [data-select-root='true'] {
+  position: relative;
+}
+
+body[data-ui='cyberdallas'] button[data-select-trigger='true'] {
+  width: 100%;
+  margin-top: 0;
+  text-align: left;
+  padding: 10px 12px;
+  border-radius: 0;
+  border: 1px solid color-mix(in srgb, CanvasText 25%, transparent);
+  background: Canvas;
+  color: CanvasText;
+}
+
+body[data-ui='cyberdallas'] button[data-select-trigger='true']::before,
+body[data-ui='cyberdallas'] button[data-select-trigger='true']::after {
+  content: '';
+  display: none;
+}
+
+body[data-ui='cyberdallas'] button[data-select-trigger='true']:focus-visible {
+  outline: 2px solid Highlight;
+  outline-offset: 1px;
+}
+
+body[data-ui='cyberdallas'] [data-select-listbox='true'] {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  z-index: 20;
+  border: 1px solid color-mix(in srgb, CanvasText 25%, transparent);
+  background: Canvas;
+  max-height: 240px;
+  overflow: auto;
+}
+
+body[data-ui='cyberdallas'] [data-select-option='true'] {
+  width: 100%;
+  margin-top: 0;
+  border: 0;
+  border-radius: 0;
+  text-align: left;
+  padding: 10px 12px;
+  background: Canvas;
+  color: CanvasText;
+  cursor: pointer;
+}
+
+body[data-ui='cyberdallas'] button[data-select-option='true']::before,
+body[data-ui='cyberdallas'] button[data-select-option='true']::after {
+  content: '';
+  display: none;
+}
+
+body[data-ui='cyberdallas'] [data-select-option='true'][aria-selected='true'] {
+  background: color-mix(in srgb, CanvasText 10%, Canvas);
+}
+
+body[data-ui='cyberdallas'] [data-select-option='true'][aria-disabled='true'] {
+  opacity: 0.6;
+  cursor: not-allowed;
+}

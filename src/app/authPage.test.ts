@@ -30,7 +30,7 @@ function setCookieValue(value: string | null) {
 }
 
 describe('AuthPage', () => {
-  it('renders register and login forms', async () => {
+  it('renders the login form by default with a toggle to register', async () => {
     process.env.AUTH_SECRET = 'test-secret';
     setCookieValue(null);
 
@@ -39,8 +39,9 @@ describe('AuthPage', () => {
     const html = renderToStaticMarkup(element);
 
     expect(html).toContain('CyberDallas 2069');
-    expect(html).toContain('Register');
     expect(html).toContain('Login');
+    expect(html).toContain('Switch to register');
+    expect(html).not.toContain('<h3>Register</h3>');
   });
 
   it('redirects to /home when already signed in', async () => {

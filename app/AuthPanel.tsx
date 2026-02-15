@@ -28,8 +28,11 @@ async function graphQLFetch<T>(input: {
 }
 
 export function AuthPanel(props: { onAuthed?: (user: AuthUser) => void } = {}) {
-  const [email, setEmail] = React.useState('');
-  const [password, setPassword] = React.useState('');
+  const [mode, setMode] = React.useState<'login' | 'register'>('login');
+  const [registerEmail, setRegisterEmail] = React.useState('');
+  const [registerPassword, setRegisterPassword] = React.useState('');
+  const [loginEmail, setLoginEmail] = React.useState('');
+  const [loginPassword, setLoginPassword] = React.useState('');
   const [me, setMe] = React.useState<AuthUser | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   const [busy, setBusy] = React.useState(false);
@@ -82,7 +85,7 @@ export function AuthPanel(props: { onAuthed?: (user: AuthUser) => void } = {}) {
       cancelled = true;
       controller.abort();
     };
-  }, []);
+  }, [props.onAuthed]);
 
   async function handleRegister(event: React.FormEvent) {
     event.preventDefault();
@@ -102,7 +105,7 @@ export function AuthPanel(props: { onAuthed?: (user: AuthUser) => void } = {}) {
             }
           }
         `,
-        variables: { email, password },
+        variables: { email: registerEmail, password: registerPassword },
       });
       setMe(data.register.user);
       window.dispatchEvent(new Event('authTokenChanged'));
@@ -132,7 +135,7 @@ export function AuthPanel(props: { onAuthed?: (user: AuthUser) => void } = {}) {
             }
           }
         `,
-        variables: { email, password },
+        variables: { email: loginEmail, password: loginPassword },
       });
       setMe(data.login.user);
       window.dispatchEvent(new Event('authTokenChanged'));
@@ -165,8 +168,13 @@ export function AuthPanel(props: { onAuthed?: (user: AuthUser) => void } = {}) {
     }
   }
 
+  function switchMode(nextMode: 'login' | 'register') {
+    setMode(nextMode);
+    setError(null);
+  }
+
   return (
-    <section>
+    <section data-auth-hydrated={hydrated ? 'true' : 'false'} data-auth-mode={mode}>
       <h2>Auth</h2>
       {me ? <p>Signed in as: {me.email}</p> : <p>Not signed in.</p>}
       {error ? <p style={{ color: 'crimson' }}>{error}</p> : null}
@@ -178,59 +186,79 @@ export function AuthPanel(props: { onAuthed?: (user: AuthUser) => void } = {}) {
       ) : null}
 
       <div style={{ display: 'grid', gap: 12, maxWidth: 420 }}>
-        <form onSubmit={handleRegister}>
-          <h3>Register</h3>
-          <label>
-            Email
-            <input
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              type="email"
-              required
-              style={{ display: 'block', width: '100%' }}
-            />
-          </label>
-          <label>
-            Password
-            <input
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              type="password"
-              required
-              style={{ display: 'block', width: '100%' }}
-            />
-          </label>
-          <button type="submit" disabled={busy || !hydrated}>
-            Register
-          </button>
-        </form>
+        {!me && mode === 'login' ? (
+          <form onSubmit={handleLogin}>
+            <h3>Login</h3>
+            <label>
+              Email
+              <input
+                value={loginEmail}
+                onChange={(e) => setLoginEmail(e.target.value)}
+                type="email"
+                required
+                style={{ display: 'block', width: '100%' }}
+              />
+            </label>
+            <label>
+              Password
+              <input
+                value={loginPassword}
+                onChange={(e) => setLoginPassword(e.target.value)}
+                type="password"
+                required
+                style={{ display: 'block', width: '100%' }}
+              />
+            </label>
+            <button type="submit" disabled={busy || !hydrated} aria-label="Login">
+              Login
+            </button>
+            <button
+              type="button"
+              onClick={() => switchMode('register')}
+              disabled={busy}
+              aria-label="Switch to register"
+            >
+              Switch to register
+            </button>
+          </form>
+        ) : null}
 
-        <form onSubmit={handleLogin}>
-          <h3>Login</h3>
-          <label>
-            Email
-            <input
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              type="email"
-              required
-              style={{ display: 'block', width: '100%' }}
-            />
-          </label>
-          <label>
-            Password
-            <input
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              type="password"
-              required
-              style={{ display: 'block', width: '100%' }}
-            />
-          </label>
-          <button type="submit" disabled={busy || !hydrated}>
-            Login
-          </button>
-        </form>
+        {!me && mode === 'register' ? (
+          <form onSubmit={handleRegister}>
+            <h3>Register</h3>
+            <label>
+              Email
+              <input
+                value={registerEmail}
+                onChange={(e) => setRegisterEmail(e.target.value)}
+                type="email"
+                required
+                style={{ display: 'block', width: '100%' }}
+              />
+            </label>
+            <label>
+              Password
+              <input
+                value={registerPassword}
+                onChange={(e) => setRegisterPassword(e.target.value)}
+                type="password"
+                required
+                style={{ display: 'block', width: '100%' }}
+              />
+            </label>
+            <button type="submit" disabled={busy || !hydrated} aria-label="Register">
+              Register
+            </button>
+            <button
+              type="button"
+              onClick={() => switchMode('login')}
+              disabled={busy}
+              aria-label="Switch to login"
+            >
+              Switch to login
+            </button>
+          </form>
+        ) : null}
       </div>
     </section>
   );

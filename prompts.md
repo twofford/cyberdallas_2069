@@ -162,8 +162,116 @@
 - Prompt (2026-02-13 23:18 UTC): What else remains to be done with auth?
 - Response: Reviewed current auth posture (HttpOnly cookie sessions, cookie-only auth, same-origin CSRF checks for mutation POSTs, no token returned from register/login) and outlined the next highest-value security/UX items: server-side session storage + revocation, rate limiting/brute-force protection, account lifecycle flows (email verification/password reset), and optional MFA/audit logging.
 
+- Prompt (2026-02-14 03:26 UTC): Reported bug: typing into Login or Register form mirrors into the other form; the two forms appear to share state.
+- Response: Added a failing Playwright regression test proving the Register/Login inputs mirrored each other, split `AuthPanel` state into separate login vs register email/password state, re-ran the targeted Playwright test to confirm it passes, and ran the Vitest unit suite to ensure no regressions.
+
+- Prompt (2026-02-14 03:34 UTC): Repo hygiene: lots of generated files (.gz, webpack/Next build artifacts) are showing as changed; update .gitignore so only meaningful changes are tracked.
+- Response: Expanded `.gitignore` to ignore Next.js build output (`.next/`), caches, test artifacts (Playwright/Vitest), logs, and local `.env*` files (keeping `.env.example` trackable). Removed the already-tracked `.next` directory from git’s index via `git rm -r --cached .next` so it stops showing up in future diffs.
+
+- Prompt (2026-02-14 03:40 UTC): Next.js dev runtime error when loading `localhost:3001` (`Cannot read properties of undefined (reading 'call')` in `.next/server/app/auth/page.js`).
+- Response: Diagnosed as a stale/corrupted Next build artifact issue (stack trace points into generated `.next` server bundle). Fixed by stopping the dev server, deleting `.next` to force a clean rebuild, and restarting Next on port 3001; verified `/auth` returns 200 without page runtime errors via a headless Playwright smoke load.
+
+- Prompt (2026-02-14 03:44 UTC): Improve the look of the UI; current UI is a simple white page with black text.
+- Response: Added a minimal global stylesheet and a stable styling hook on the root layout (`data-ui="cyberdallas"`) so pages render with improved spacing, typography, and form/button styling. Styling uses CSS system colors (no custom palette), and a small unit test was added to lock in the layout hook; `npm test` remains green.
+
+- Prompt (2026-02-14 03:45 UTC): UI direction: "Clean terminal".
+- Response: Updated the global stylesheet to a clean terminal aesthetic (monospace system font stack, tighter layout, minimal bordered panels/controls, focus outlines) while still relying on CSS system color keywords (no hard-coded palette). Verified unit tests remain green.
+
+- Prompt (2026-02-14 03:46 UTC): Confirmed to proceed with making headings and lists feel more like terminal output.
+- Response: Implemented prompt-like prefixes using CSS pseudo-elements (e.g. `$ ` for the main heading and `> ` for section headings; `-` for list items) in the global stylesheet without changing the underlying text content. Added a small unit test that asserts these selectors exist; `npm test` remains green.
+
+- Prompt (2026-02-14 03:48 UTC): Confirmed to proceed with making code/inline elements look more like terminal blocks.
+- Response: Added terminal-style formatting for inline `code` and `pre` blocks in the global stylesheet using only system colors (subtle panel background + border), and added a small unit test asserting the relevant selectors exist; `npm test` remains green.
+
+- Prompt (2026-02-14 03:49 UTC): UI feedback: remove rounded borders; make them angular.
+- Response: Updated global terminal styles to use angular corners by setting border radii to `0` for panels, inputs, buttons, and code/pre blocks; verified `npm test` remains green.
+
+- Prompt (2026-02-14 03:55 UTC): Go further: make the UI look even more like a terminal (CSS-only, no new pages/components).
+- Response: Added additional terminal polish in the global stylesheet: system-color selection styling, a subtle terminal grid background (system-color based), bracketed buttons via pseudo-elements, and section header divider lines. Updated CSS unit tests to lock in these selectors and verified `npm test` remains green.
+
+- Prompt (2026-02-14 03:55 UTC): Asked why there is a weird grid on the page.
+- Response: Explained it’s an intentional “terminal grid” background coming from the global CSS (`background-image` linear-gradients) added as terminal polish; offered to remove it or gate it behind a preference/toggle.
+
+- Prompt (2026-02-14 04:15 UTC): Asked to add an E2E cleanup script because Playwright specs were slow/timeouting.
+- Response: Added an `e2e:kill` script that terminates orphaned E2E processes (port 3002 listeners and lingering Playwright test-server/e2eDevServer), and updated `test:e2e` to run the cleanup before executing Playwright.
+
+- Prompt (2026-02-14 04:22 UTC): Asked to add dashboard links so clicking a character navigates to a stats page.
+- Response: Added a character detail route (`/characters/[id]`) that loads character stats via GraphQL and requires auth. Updated the dashboard character list to render character names as links to the new route. Added a Playwright test that clicks a character link and asserts the stats view renders.
+
+- Prompt (2026-02-14 04:24 UTC): Asked to ensure the character page shows all character info, not just stats (skills, cybernetics, items, weapons, vehicles).
+- Response: Expanded the character detail GraphQL query and UI to render sections for Skills, Cybernetics, Weapons, Items, and Vehicles (with "None." empty states when a character has none). Updated the Playwright character navigation test to assert these sections render.
+
 - Prompt (2026-02-14 05:54 UTC): Debug why `npm run test:e2e` is running incredibly slowly, and do not attempt to run it again until investigated.
 - Response: Found orphaned Playwright/Next E2E devserver processes still listening on port 3002 after an interrupted run (making subsequent runs appear hung). Killed the lingering processes, instrumented `src/scripts/e2eDevServer.ts` with step timing logs, switched Prisma/Next invocations to `npx --no-install` to avoid implicit downloads, skipped Prisma client generation during `migrate reset`, and added a clearer Playwright `webServer.timeout`.
 
 - Prompt (2026-02-14 06:15 UTC): Run E2E after debugging, then fix any issues discovered.
 - Response: Ran Playwright and found Next 15 runtime errors requiring `await cookies()` in server components, then fixed [app/page.tsx](app/page.tsx) and [app/auth/page.tsx](app/auth/page.tsx) and updated unit mocks. Investigated remaining E2E auth failures with Playwright debug logs and found the Login/Register forms could submit natively before React hydration (navigating to `/auth?`), so I disabled auth submit buttons until hydration in [app/AuthPanel.tsx](app/AuthPanel.tsx) and updated [e2e/auth.spec.ts](e2e/auth.spec.ts) to wait for buttons to be enabled before clicking. E2E suite is now passing.
+
+- Prompt (2026-02-14): Auth UX: “I don’t want both login and register forms on the same page.”
+- Response: Refactored `/auth` to a single-form UX with a mode toggle (default Login) and “Switch to register/login” affordance; added stable `aria-label`s and hydration markers (`data-auth-hydrated`, `data-auth-mode`) to reduce Playwright flakiness.
+
+- Prompt (2026-02-14): UI feedback: remove the weird grid background.
+- Response: Removed the terminal grid background from global styles while keeping the rest of the terminal aesthetic; updated the related unit tests to reflect the new selectors.
+
+- Prompt (2026-02-14): Add catalog detail pages for Cybernetics/Weapons/Items/Vehicles and link to them from the dashboard.
+- Response: Implemented detail routes for each catalog type, wired the dashboard lists to link to them, and added/updated Playwright coverage to ensure the links navigate and the detail pages render.
+
+- Prompt (2026-02-14): Add the ability for users to create new characters.
+- Response: Implemented a `createCharacter` GraphQL mutation with datasource support, added a minimal character-creation UI, and added unit + Playwright tests for the end-to-end creation flow.
+
+- Prompt (2026-02-14): UX change: don’t show the create-character form inline on the dashboard; make it a button that goes to a dedicated new page.
+- Response: Removed the inline dashboard creation form, added a “New character” button that routes to `/characters/new`, created the dedicated page, and updated E2E to use the new flow.
+
+- Prompt (2026-02-14): Expand character creation so users can set stats, skills, and loadout (cybernetics/items/weapons/vehicles) at creation time.
+- Response: Extended `createCharacter` input + validation + persistence (Prisma + in-memory) to accept stats/skills/gear IDs; updated the `/characters/new` UI to collect these values and submit them; updated unit + Playwright coverage.
+
+- Prompt (2026-02-14): Skills must match the predefined list in rules.md.
+- Response: Aligned the predefined skill list to rules.md in the GraphQL layer and UI; canonicalized skill names case-insensitively for predefined skills while still allowing custom skill names.
+
+- Prompt (2026-02-14): Skills UX: instead of dropdowns, list each skill with a numeric input like stats.
+- Response: Replaced the skills dropdown UX with a full predefined skills grid of numeric inputs (0–10) to match the stats entry pattern.
+
+- Prompt (2026-02-14): Add user-defined custom skills (up to 5): name + value.
+- Response: Added an “Add new skill” flow that creates up to 5 custom skill rows (name + level) and includes them in the submitted `createCharacter` payload.
+
+- Prompt (2026-02-14): Add a “Save” button on each custom skill row that promotes it into the main skills list and clears/removes the custom input.
+- Response: Implemented per-row Save that canonicalizes predefined matches, de-dupes case-insensitively, adds the saved skill into the main skills grid, sets its numeric value, and removes the custom row; verified with unit + Playwright.
+
+- Prompt (2026-02-14): “Let’s also add a way to remove custom skills from the main skill grid.”
+- Response: Added a per-skill “Remove” button for saved custom skills (predefined skills are not removable) and verified with `npm test` + `npm run test:e2e`.
+
+- Prompt (2026-02-14): Before adding more tests: prompts.md is missing appended prompt/response entries.
+- Response: Identified the last logged entry in prompts.md, restored chronological ordering for the out-of-order 05:54/06:15 entries, and appended all missing prompt/response summaries since then to the bottom of the file.
+
+- Prompt (2026-02-14): The custom-skill remove control is throwing off the CSS; replace the Remove button with a corner “X” overlay and keep skill inputs full-width.
+- Response: Replaced the layout-affecting Remove button with an absolutely-positioned “×” icon over the custom skill input, ensured the nested input stays `width: 100%` so all skill inputs span the full column, and adjusted the icon-button CSS to disable the bracket pseudo-elements and render as a subtle corner control; `npm test` remains green.
+
+- Prompt (2026-02-14): Duplicate skills are invalid state; add reusable frontend error scaffolding and communicate duplicate-skill errors to the user.
+- Response: Added a reusable notices scaffold (`useNotices` + `Notices`) and integrated it into character creation. The UI now blocks saving or submitting duplicate skills (including custom vs predefined/saved/custom duplicates) and shows clear error messages instead of silently overriding levels. Verified with `npm test` and `npm run test:e2e`.
+
+- Prompt (2026-02-14): Error messages are appearing at the top of the page while the user is scrolled down; show invalid-state errors where the user is interacting (a tooltip would work).
+- Response: Added a reusable `TooltipNotice` component and switched duplicate-skill validation feedback to action-local tooltips: clicking Save shows the error next to that Save button, and clicking Create shows the error next to the Create button. Kept the top notices for general load errors; `npm test` and `npm run test:e2e` pass.
+
+- Prompt (2026-02-14): Move the invalid-action tooltip to the right of the Save button (not above it).
+- Response: Updated `TooltipNotice` positioning so it renders to the right of the anchored button (vertically centered) instead of above, improving visibility while the user is focused on the Save/Create actions; `npm test` remains green.
+
+- Prompt (2026-02-14): The tooltip is taller than surrounding elements; make it the same size.
+- Response: Updated `TooltipNotice` to render as a single-line pill with the same padding/font sizing as our inputs/buttons and with ellipsis truncation (no multi-line wrapping), so its height matches adjacent controls; `npm test` remains green.
+
+- Prompt (2026-02-14): The tooltip exceeds the width of the section; it should never overflow the form container.
+- Response: Refactored `TooltipNotice` to render as an inline pill and placed it as a flex sibling to the right of the Save/Create buttons. This keeps the tooltip constrained by the section width (with ellipsis truncation) while still appearing where the invalid action occurs; `npm test` and `npm run test:e2e` pass.
+
+- Prompt (2026-02-14): The Save button is scrunched and the tooltip is truncating useful info; widen the section/form and ensure everything fits nicely.
+- Response: Widened the main content container (`main` max-width) so the form section has more horizontal space, and adjusted the Save/Create + tooltip flex layout so buttons keep their natural width and tooltip text wraps instead of truncating. Verified with `npm test` and `npm run test:e2e`.
+
+- Prompt (2026-02-14): The Stats and Skills sections are too close to the preceding controls; add more padding/spacing up top.
+- Response: Increased top spacing above the Stats and Skills section headings on the character creation form so they have clearer separation from the preceding fields; `npm test` remains green.
+
+- Prompt (2026-02-14): The campaign select dropdown doesn’t match the app style (generic font/light colors); make it look like the rest of the text.
+- Response: Added global `select` styling under the cyberdallas theme so dropdowns inherit the monospace font and use Canvas/CanvasText colors, matching inputs/buttons and the rest of the terminal UI; `npm test` remains green.
+
+- Prompt (2026-02-14): The opened dropdown list still shows a generic gray background and default font; change that too.
+- Response: Added theme styling for `option`/`optgroup` and set `color-scheme: dark` on `select` to encourage the native dropdown list to render with dark Canvas/CanvasText and inherited font where the browser allows; `npm test` remains green.
+
+- Prompt (2026-02-14): Let’s do the custom select, then.
+- Response: Implemented a custom Campaign select ([app/ui/Select.tsx](app/ui/Select.tsx)) so the opened dropdown list can be fully styled to match the terminal theme on macOS. Wired it into the character creation form, added global theme CSS for the select trigger/listbox/options, updated Playwright E2E to click the desired campaign option, and verified `npm test` + `npm run test:e2e` pass.

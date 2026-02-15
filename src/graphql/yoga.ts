@@ -20,6 +20,31 @@ type YogaContext = {
   httpHeaders: Record<string, string>;
 };
 
+const PREDEFINED_SKILLS = [
+  'Athleticism',
+  'Awareness',
+  'Connections',
+  'Deception',
+  'Driving',
+  'Engineering',
+  'Explosives',
+  'Hacking',
+  'Influence',
+  'Intimidation',
+  'Investigation',
+  'Marksmanship',
+  'Martial Arts',
+  'Medicine',
+  'Melee Combat',
+  'Piloting',
+  'Seduction',
+  'Stealth',
+  'Street Smarts',
+  'Tracking',
+] as const;
+
+const PREDEFINED_SKILL_BY_LOWER = new Map(PREDEFINED_SKILLS.map((s) => [s.toLowerCase(), s] as const));
+
 export function createYogaServer() {
   const dataSource = createDataSource();
 
@@ -165,7 +190,21 @@ export function createYogaServer() {
         luck: Int!
       }
 
+      input StatsInput {
+        brawn: Int
+        charm: Int
+        intelligence: Int
+        reflexes: Int
+        tech: Int
+        luck: Int
+      }
+
       type Skill {
+        name: String!
+        level: Int!
+      }
+
+      input SkillInput {
         name: String!
         level: Int!
       }
@@ -289,6 +328,16 @@ export function createYogaServer() {
         login(email: String!, password: String!): AuthPayload!
         logout: Boolean!
         joinCampaign(campaignId: ID!): Campaign!
+        createCharacter(
+          campaignId: ID
+          name: String!
+          stats: StatsInput
+          skills: [SkillInput!]
+          cyberneticIds: [ID!]
+          weaponIds: [ID!]
+          itemIds: [ID!]
+          vehicleIds: [ID!]
+        ): Character!
         createCampaignInvite(campaignId: ID!, email: String!): CampaignInviteToken!
         acceptCampaignInvite(token: String!): Campaign!
       }
@@ -380,6 +429,123 @@ export function createYogaServer() {
 
           await ctx.dataSource.addUserToCampaign({ userId: user.id, campaignId });
           return campaign;
+        },
+
+        createCharacter: async (
+          _parent: unknown,
+          args: {
+            campaignId?: string | null;
+            name: string;
+            stats?: Partial<StatsRecord> | null;
+            skills?: Array<{ name: string; level: number }> | null;
+            cyberneticIds?: string[] | null;
+            weaponIds?: string[] | null;
+            itemIds?: string[] | null;
+            vehicleIds?: string[] | null;
+          },
+          ctx: YogaContext,
+        ) => {
+          const user = requireUser(ctx);
+          const campaignIdRaw = args.campaignId;
+          const campaignId = campaignIdRaw === null || campaignIdRaw === undefined ? null : String(campaignIdRaw).trim();
+          const campaignIdOrNull = campaignId?.length ? campaignId : null;
+          const name = String(args.name ?? '').trim();
+
+          if (!name) throw new GraphQLError('Invalid character name');
+
+          if (campaignIdOrNull) {
+            const campaign = await ctx.dataSource.getCampaignById(campaignIdOrNull);
+            if (!campaign) throw new GraphQLError('Campaign not found');
+
+            const role = await ctx.dataSource.getCampaignMembershipRole({ userId: user.id, campaignId: campaignIdOrNull });
+            if (!role) throw new GraphQLError('Not authorized');
+          }
+
+          function parseOptionalStat(value: unknown): number | undefined {
+            if (value === null || value === undefined) return undefined;
+            if (typeof value !== 'number' || !Number.isFinite(value) || !Number.isInteger(value)) return undefined;
+            if (value < 0 || value > 10) return undefined;
+            return value;
+          }
+
+          const statsIn = (args.stats ?? {}) as Partial<Record<keyof StatsRecord, unknown>>;
+          const stats: Partial<StatsRecord> = {
+            brawn: parseOptionalStat(statsIn.brawn),
+            charm: parseOptionalStat(statsIn.charm),
+            intelligence: parseOptionalStat(statsIn.intelligence),
+            reflexes: parseOptionalStat(statsIn.reflexes),
+            tech: parseOptionalStat(statsIn.tech),
+            luck: parseOptionalStat(statsIn.luck),
+          };
+          for (const [key, value] of Object.entries(stats)) {
+            if (value === undefined) continue;
+            if (typeof value !== 'number') throw new GraphQLError(`Invalid stat: ${key}`);
+          }
+
+          const skillsIn = Array.isArray(args.skills) ? args.skills : [];
+          const skills = skillsIn
+            .map((s) => {
+              const maybe = s as { name?: unknown; level?: unknown };
+              const rawLevel = maybe?.level;
+              const level = typeof rawLevel === 'number' ? rawLevel : Number.NaN;
+              return { name: String(maybe?.name ?? '').trim(), level };
+            })
+            .filter((s) => s.name.length > 0);
+
+          const seenSkillNames = new Set<string>();
+          for (const skill of skills) {
+            if (skill.name.length > 64) throw new GraphQLError('Invalid skill name');
+            if (typeof skill.level !== 'number' || !Number.isInteger(skill.level) || skill.level < 0 || skill.level > 10) {
+              throw new GraphQLError('Invalid skill level');
+            }
+            const normalized = skill.name.toLowerCase();
+            if (seenSkillNames.has(normalized)) throw new GraphQLError('Duplicate skill');
+            seenSkillNames.add(normalized);
+
+            const canonical = PREDEFINED_SKILL_BY_LOWER.get(normalized);
+            if (canonical) skill.name = canonical;
+          }
+
+          const cyberneticIds = (Array.isArray(args.cyberneticIds) ? args.cyberneticIds : []).map(String).filter(Boolean);
+          const weaponIds = (Array.isArray(args.weaponIds) ? args.weaponIds : []).map(String).filter(Boolean);
+          const itemIds = (Array.isArray(args.itemIds) ? args.itemIds : []).map(String).filter(Boolean);
+          const vehicleIds = (Array.isArray(args.vehicleIds) ? args.vehicleIds : []).map(String).filter(Boolean);
+
+          async function validateIds(kind: string, ids: string[], allowedIds: Set<string>) {
+            for (const id of ids) {
+              if (!allowedIds.has(id)) throw new GraphQLError(`Unknown ${kind}: ${id}`);
+            }
+          }
+
+          if (cyberneticIds.length) {
+            const allowed = new Set((await ctx.dataSource.listCybernetics()).map((c) => c.id));
+            await validateIds('cybernetic', cyberneticIds, allowed);
+          }
+          if (weaponIds.length) {
+            const allowed = new Set((await ctx.dataSource.listWeapons()).map((w) => w.id));
+            await validateIds('weapon', weaponIds, allowed);
+          }
+          if (itemIds.length) {
+            const allowed = new Set((await ctx.dataSource.listItems()).map((i) => i.id));
+            await validateIds('item', itemIds, allowed);
+          }
+          if (vehicleIds.length) {
+            const allowed = new Set((await ctx.dataSource.listVehicles()).map((v) => v.id));
+            await validateIds('vehicle', vehicleIds, allowed);
+          }
+
+          const hasAnyStat = Object.values(stats).some((v) => typeof v === 'number');
+          return ctx.dataSource.createCharacter({
+            ownerId: user.id,
+            campaignId: campaignIdOrNull,
+            name,
+            stats: hasAnyStat ? stats : undefined,
+            skills: skills.length ? skills : undefined,
+            cyberneticIds: cyberneticIds.length ? cyberneticIds : undefined,
+            weaponIds: weaponIds.length ? weaponIds : undefined,
+            itemIds: itemIds.length ? itemIds : undefined,
+            vehicleIds: vehicleIds.length ? vehicleIds : undefined,
+          });
         },
 
         createCampaignInvite: async (
@@ -535,10 +701,18 @@ export function createYogaServer() {
           if (!httpHeaders || Object.keys(httpHeaders).length === 0) return;
 
           if (!result) return;
-          const isAsyncIterable = typeof (result as any)[Symbol.asyncIterator] === 'function';
+          const maybeAsyncIterable = result as unknown as { [Symbol.asyncIterator]?: unknown };
+          const isAsyncIterable = typeof maybeAsyncIterable?.[Symbol.asyncIterator] === 'function';
           if (isAsyncIterable) return;
 
-          const res = result as any;
+          const res = result as unknown as {
+            extensions?: {
+              http?: {
+                headers?: Record<string, string>;
+              };
+            };
+            [key: string]: unknown;
+          };
           const next = {
             ...res,
             extensions: {

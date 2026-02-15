@@ -1,6 +1,8 @@
 'use client';
 
 import * as React from 'react';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 
 type Campaign = { id: string; name: string };
 
@@ -39,6 +41,7 @@ async function graphQLFetch<T>(input: {
 }
 
 export function PrivateCampaignsAndCharacters() {
+  const router = useRouter();
   const [signedIn, setSignedIn] = React.useState(false);
   const [data, setData] = React.useState<PrivateData | null>(null);
   const [ownerCampaignIds, setOwnerCampaignIds] = React.useState<Set<string>>(new Set());
@@ -46,6 +49,40 @@ export function PrivateCampaignsAndCharacters() {
   const [busy, setBusy] = React.useState(false);
   const [inviteBusy, setInviteBusy] = React.useState<string | null>(null);
   const [inviteStatus, setInviteStatus] = React.useState<string | null>(null);
+
+  const refreshPrivateData = React.useCallback(async () => {
+    const result = await graphQLFetch<PrivateData>({
+      query: /* GraphQL */ `
+        query PrivateCampaignsAndCharacters {
+          campaigns {
+            id
+            name
+          }
+          characters {
+            id
+            name
+            campaign {
+              id
+              name
+            }
+          }
+        }
+      `,
+    });
+
+    const owners = await graphQLFetch<OwnerCampaignsData>({
+      query: /* GraphQL */ `
+        query OwnerCampaigns {
+          ownerCampaigns {
+            id
+          }
+        }
+      `,
+    });
+
+    setData(result);
+    setOwnerCampaignIds(new Set(owners.ownerCampaigns.map((c) => c.id)));
+  }, []);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -105,37 +142,7 @@ export function PrivateCampaignsAndCharacters() {
 
     (async () => {
       try {
-        const result = await graphQLFetch<PrivateData>({
-          query: /* GraphQL */ `
-            query PrivateCampaignsAndCharacters {
-              campaigns {
-                id
-                name
-              }
-              characters {
-                id
-                name
-                campaign {
-                  id
-                  name
-                }
-              }
-            }
-          `,
-        });
-
-        const owners = await graphQLFetch<OwnerCampaignsData>({
-          query: /* GraphQL */ `
-            query OwnerCampaigns {
-              ownerCampaigns {
-                id
-              }
-            }
-          `,
-        });
-
-        if (!cancelled) setData(result);
-        if (!cancelled) setOwnerCampaignIds(new Set(owners.ownerCampaigns.map((c) => c.id)));
+        await refreshPrivateData();
       } catch (e) {
         if (!cancelled) {
           setData(null);
@@ -150,7 +157,7 @@ export function PrivateCampaignsAndCharacters() {
     return () => {
       cancelled = true;
     };
-  }, [signedIn]);
+  }, [signedIn, refreshPrivateData]);
 
   async function sendInvite(campaignId: string, email: string) {
     if (!signedIn) return;
@@ -213,13 +220,26 @@ export function PrivateCampaignsAndCharacters() {
         ) : error ? (
           <p style={{ color: 'crimson' }}>{error}</p>
         ) : (
-          <ul>
-            {(data?.characters ?? []).map((character) => (
-              <li key={character.id}>
-                {character.name} — {character.campaign?.name ?? 'Archetype'}
-              </li>
-            ))}
-          </ul>
+          <>
+            {(data?.campaigns?.length ?? 0) === 0 ? (
+              <p>Join a campaign to create characters.</p>
+            ) : (
+              <p>
+                <button type="button" onClick={() => router.push('/characters/new')}>
+                  New character
+                </button>
+              </p>
+            )}
+
+            <ul>
+              {(data?.characters ?? []).map((character) => (
+                <li key={character.id}>
+                  <Link href={`/characters/${character.id}`}>{character.name}</Link> —{' '}
+                  {character.campaign?.name ?? 'Archetype'}
+                </li>
+              ))}
+            </ul>
+          </>
         )}
       </section>
     </>

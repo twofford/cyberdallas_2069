@@ -18,6 +18,7 @@ model User {
   passwordHash String
   campaignMemberships CampaignMembership[]
   acceptedCampaignInvites CampaignInvite[] @relation("AcceptedInvites")
+  characters   Character[]
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 }
@@ -48,6 +49,9 @@ model Character {
   campaignId String?
   campaign   Campaign? @relation(fields: [campaignId], references: [id])
 
+  ownerId String?
+  owner   User? @relation(fields: [ownerId], references: [id], onDelete: SetNull)
+
   skills       CharacterSkill[]
   cybernetics  CharacterCybernetic[]
   weapons      CharacterWeapon[]
@@ -56,6 +60,8 @@ model Character {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@index([ownerId])
 }
 
 model CampaignMembership {

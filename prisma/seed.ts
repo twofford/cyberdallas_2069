@@ -132,6 +132,7 @@ async function main() {
         reflexes: stats.reflexes ?? 0,
         tech: stats.tech ?? 0,
         luck: stats.luck ?? 0,
+        ownerId: character.ownerId ?? null,
         campaignId: character.campaignId ?? null,
       },
       create: {
@@ -146,6 +147,7 @@ async function main() {
         reflexes: stats.reflexes ?? 0,
         tech: stats.tech ?? 0,
         luck: stats.luck ?? 0,
+        ownerId: character.ownerId ?? null,
         campaignId: character.campaignId ?? null,
       },
     });

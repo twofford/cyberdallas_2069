@@ -1,10 +1,13 @@
 import { spawn } from 'node:child_process';
 
-function requiredEnv(name: string): string {
-  const value = process.env[name];
+function requiredEnv(env: NodeJS.ProcessEnv, name: string): string {
+  const value = env[name];
   if (!value) throw new Error(`Missing env var: ${name}`);
   return value;
 }
+
+const defaultE2eDatabaseUrl =
+  'postgresql://postgres@localhost:5432/cyberdallas_e2e?schema=public';
 
 type RunResult = { code: number; stdout: string; stderr: string };
 
@@ -55,7 +58,7 @@ function parseDbName(databaseUrl: string): { dbName: string; host: string; port?
 
 async function ensureDatabaseExists(env: NodeJS.ProcessEnv) {
   const startedAt = nowMs();
-  const databaseUrl = requiredEnv('DATABASE_URL');
+  const databaseUrl = requiredEnv(env, 'DATABASE_URL');
   const { dbName, host, port, user } = parseDbName(databaseUrl);
 
   // Best-effort: create DB if it doesn't exist. If the CLI isn't available,
@@ -102,9 +105,12 @@ async function main() {
   const overallStartedAt = nowMs();
   const port = process.env.PORT ?? '3002';
 
+  const databaseUrl = process.env.DATABASE_URL ?? process.env.DATABASE_URL_E2E ?? defaultE2eDatabaseUrl;
+
   const env: NodeJS.ProcessEnv = {
     ...process.env,
     PORT: String(port),
+    DATABASE_URL: databaseUrl,
   };
 
   await ensureDatabaseExists(env);

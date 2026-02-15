@@ -81,11 +81,12 @@ export type CharacterRecord = {
   id: string;
   name: string;
   isPublic?: boolean;
+  ownerId?: string;
   speed?: number;
   hitPoints?: number;
   stats?: Partial<StatsRecord>;
   skills?: SkillRecord[];
-  campaignId?: string;
+  campaignId?: string | null;
   cyberneticIds?: string[];
   weaponIds?: string[];
   vehicleIds?: string[];
@@ -106,6 +107,10 @@ export const campaigns: CampaignRecord[] = [
   {
     id: 'camp_3',
     name: 'Synthetic Dawn',
+  },
+  {
+    id: 'camp_4',
+    name: 'Midnight Circuit',
   },
 ];
 

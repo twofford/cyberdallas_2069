@@ -1,5 +1,14 @@
 import { getPrismaClient } from '../db/prisma';
-import type { CampaignRecord, CharacterRecord, CyberneticRecord, ItemRecord, VehicleRecord, WeaponRecord } from './seed';
+import type {
+  CampaignRecord,
+  CharacterRecord,
+  CyberneticRecord,
+  ItemRecord,
+  SkillRecord,
+  StatsRecord,
+  VehicleRecord,
+  WeaponRecord,
+} from './seed';
 import { campaigns, characters, cybernetics, items, vehicles, weapons } from './seed';
 import crypto from 'node:crypto';
 
@@ -18,6 +27,17 @@ export type DataSource = {
   listCampaignsForUser(userId: string): Promise<CampaignRecord[]>;
   listCharacters(): Promise<CharacterRecord[]>;
   listCharactersForUser(userId: string): Promise<CharacterRecord[]>;
+  createCharacter(input: {
+    ownerId: string;
+    campaignId?: string | null;
+    name: string;
+    stats?: Partial<StatsRecord>;
+    skills?: SkillRecord[];
+    cyberneticIds?: string[];
+    weaponIds?: string[];
+    itemIds?: string[];
+    vehicleIds?: string[];
+  }): Promise<CharacterRecord>;
   listCybernetics(): Promise<CyberneticRecord[]>;
   listWeapons(): Promise<WeaponRecord[]>;
   listItems(): Promise<ItemRecord[]>;
@@ -68,6 +88,15 @@ function createInMemoryDataSource(): DataSource {
   const users: UserRecord[] = [];
   const campaignMembers = new Map<string, Map<string, 'OWNER' | 'MEMBER'>>();
   const invites: InMemoryCampaignInvite[] = [];
+  const characterStore: CharacterRecord[] = characters.map((c) => ({
+    ...c,
+    stats: c.stats ? { ...c.stats } : undefined,
+    skills: c.skills ? [...c.skills] : undefined,
+    cyberneticIds: c.cyberneticIds ? [...c.cyberneticIds] : undefined,
+    weaponIds: c.weaponIds ? [...c.weaponIds] : undefined,
+    vehicleIds: c.vehicleIds ? [...c.vehicleIds] : undefined,
+    itemIds: c.itemIds ? [...c.itemIds] : undefined,
+  }));
 
   function getMembershipsByUser(userId: string): Map<string, 'OWNER' | 'MEMBER'> {
     const existing = campaignMembers.get(userId);
@@ -88,6 +117,10 @@ function createInMemoryDataSource(): DataSource {
     return character.isPublic === true;
   }
 
+  function isOwnedByUser(character: CharacterRecord, userId: string): boolean {
+    return character.ownerId === userId;
+  }
+
   function isCharacterInMemberCampaign(character: CharacterRecord, userId: string): boolean {
     if (!character.campaignId) return false;
     return getMembershipsByUser(userId).has(character.campaignId);
@@ -106,10 +139,57 @@ function createInMemoryDataSource(): DataSource {
       return campaigns.filter((c) => memberships.has(c.id));
     },
     async listCharacters() {
-      return characters;
+      return characterStore;
     },
     async listCharactersForUser(userId: string) {
-      return characters.filter((c) => isPublicCharacter(c) || isCharacterInMemberCampaign(c, userId));
+      return characterStore.filter((c) => isPublicCharacter(c) || isOwnedByUser(c, userId) || isCharacterInMemberCampaign(c, userId));
+    },
+
+    async createCharacter(input: {
+      ownerId: string;
+      campaignId?: string | null;
+      name: string;
+      stats?: Partial<StatsRecord>;
+      skills?: SkillRecord[];
+      cyberneticIds?: string[];
+      weaponIds?: string[];
+      itemIds?: string[];
+      vehicleIds?: string[];
+    }) {
+      const campaignId = input.campaignId ?? null;
+      if (campaignId) {
+        const campaign = campaigns.find((c) => c.id === campaignId);
+        if (!campaign) throw new Error('CAMPAIGN_NOT_FOUND');
+      }
+
+      const s = input.stats ?? {};
+      const stats: StatsRecord = {
+        brawn: s.brawn ?? 0,
+        charm: s.charm ?? 0,
+        intelligence: s.intelligence ?? 0,
+        reflexes: s.reflexes ?? 0,
+        tech: s.tech ?? 0,
+        luck: s.luck ?? 0,
+      };
+
+      const character: CharacterRecord = {
+        id: `c_${crypto.randomUUID()}`,
+        name: input.name,
+        isPublic: false,
+        ownerId: input.ownerId,
+        campaignId: campaignId ?? undefined,
+        speed: 30,
+        hitPoints: 5,
+        stats,
+        skills: input.skills ?? [],
+        cyberneticIds: input.cyberneticIds ?? [],
+        weaponIds: input.weaponIds ?? [],
+        itemIds: input.itemIds ?? [],
+        vehicleIds: input.vehicleIds ?? [],
+      };
+
+      characterStore.push(character);
+      return character;
     },
     async listCybernetics() {
       return cybernetics;
@@ -209,6 +289,51 @@ function createInMemoryDataSource(): DataSource {
 
 function createPrismaDataSource(): DataSource {
   const prisma = getPrismaClient();
+
+  function mapCharacterRow(row: {
+    id: string;
+    name: string;
+    isPublic: boolean;
+    speed: number;
+    hitPoints: number;
+    brawn: number;
+    charm: number;
+    intelligence: number;
+    reflexes: number;
+    tech: number;
+    luck: number;
+    ownerId: string | null;
+    campaignId: string | null;
+    skills: Array<{ name: string; level: number }>;
+    cybernetics: Array<{ cyberneticId: string }>;
+    weapons: Array<{ weaponId: string }>;
+    items: Array<{ itemId: string }>;
+    vehicles: Array<{ vehicleId: string }>;
+  }): CharacterRecord {
+    return {
+      id: row.id,
+      name: row.name,
+      isPublic: row.isPublic,
+      speed: row.speed,
+      hitPoints: row.hitPoints,
+      ownerId: row.ownerId ?? undefined,
+      campaignId: row.campaignId ?? undefined,
+      stats: {
+        brawn: row.brawn,
+        charm: row.charm,
+        intelligence: row.intelligence,
+        reflexes: row.reflexes,
+        tech: row.tech,
+        luck: row.luck,
+      },
+      skills: row.skills,
+      cyberneticIds: row.cybernetics.map((c) => c.cyberneticId),
+      weaponIds: row.weapons.map((w) => w.weaponId),
+      itemIds: row.items.map((i) => i.itemId),
+      vehicleIds: row.vehicles.map((v) => v.vehicleId),
+    };
+  }
+
   return {
     kind: 'prisma',
     async getCampaignById(id: string) {
@@ -246,6 +371,7 @@ function createPrismaDataSource(): DataSource {
           reflexes: true,
           tech: true,
           luck: true,
+          ownerId: true,
           campaignId: true,
           skills: { select: { name: true, level: true } },
           cybernetics: { select: { cyberneticId: true } },
@@ -255,33 +381,14 @@ function createPrismaDataSource(): DataSource {
         },
       });
 
-      return rows.map((row) => ({
-        id: row.id,
-        name: row.name,
-        isPublic: row.isPublic,
-        speed: row.speed,
-        hitPoints: row.hitPoints,
-        campaignId: row.campaignId,
-        stats: {
-          brawn: row.brawn,
-          charm: row.charm,
-          intelligence: row.intelligence,
-          reflexes: row.reflexes,
-          tech: row.tech,
-          luck: row.luck,
-        },
-        skills: row.skills,
-        cyberneticIds: row.cybernetics.map((c) => c.cyberneticId),
-        weaponIds: row.weapons.map((w) => w.weaponId),
-        itemIds: row.items.map((i) => i.itemId),
-        vehicleIds: row.vehicles.map((v) => v.vehicleId),
-      }));
+      return rows.map(mapCharacterRow);
     },
     async listCharactersForUser(userId: string) {
       const rows = await prisma.character.findMany({
         where: {
           OR: [
             { isPublic: true },
+            { ownerId: userId },
             {
               campaign: {
                 memberships: {
@@ -303,6 +410,7 @@ function createPrismaDataSource(): DataSource {
           reflexes: true,
           tech: true,
           luck: true,
+          ownerId: true,
           campaignId: true,
           skills: { select: { name: true, level: true } },
           cybernetics: { select: { cyberneticId: true } },
@@ -312,27 +420,76 @@ function createPrismaDataSource(): DataSource {
         },
       });
 
-      return rows.map((row) => ({
-        id: row.id,
-        name: row.name,
-        isPublic: row.isPublic,
-        speed: row.speed,
-        hitPoints: row.hitPoints,
-        campaignId: row.campaignId,
-        stats: {
-          brawn: row.brawn,
-          charm: row.charm,
-          intelligence: row.intelligence,
-          reflexes: row.reflexes,
-          tech: row.tech,
-          luck: row.luck,
+      return rows.map(mapCharacterRow);
+    },
+
+    async createCharacter(input: {
+      ownerId: string;
+      campaignId?: string | null;
+      name: string;
+      stats?: Partial<StatsRecord>;
+      skills?: SkillRecord[];
+      cyberneticIds?: string[];
+      weaponIds?: string[];
+      itemIds?: string[];
+      vehicleIds?: string[];
+    }) {
+      const stats = input.stats ?? {};
+      const row = await prisma.character.create({
+        data: {
+          name: input.name,
+          isPublic: false,
+          ownerId: input.ownerId,
+          campaignId: input.campaignId ?? null,
+          ...(stats.brawn !== undefined ? { brawn: stats.brawn } : {}),
+          ...(stats.charm !== undefined ? { charm: stats.charm } : {}),
+          ...(stats.intelligence !== undefined ? { intelligence: stats.intelligence } : {}),
+          ...(stats.reflexes !== undefined ? { reflexes: stats.reflexes } : {}),
+          ...(stats.tech !== undefined ? { tech: stats.tech } : {}),
+          ...(stats.luck !== undefined ? { luck: stats.luck } : {}),
+
+          ...(input.skills?.length
+            ? {
+                skills: {
+                  create: input.skills.map((skill) => ({
+                    name: skill.name,
+                    level: skill.level,
+                  })),
+                },
+              }
+            : {}),
+          ...(input.cyberneticIds?.length
+            ? { cybernetics: { create: input.cyberneticIds.map((cyberneticId) => ({ cyberneticId })) } }
+            : {}),
+          ...(input.weaponIds?.length ? { weapons: { create: input.weaponIds.map((weaponId) => ({ weaponId })) } } : {}),
+          ...(input.itemIds?.length ? { items: { create: input.itemIds.map((itemId) => ({ itemId })) } } : {}),
+          ...(input.vehicleIds?.length
+            ? { vehicles: { create: input.vehicleIds.map((vehicleId) => ({ vehicleId })) } }
+            : {}),
         },
-        skills: row.skills,
-        cyberneticIds: row.cybernetics.map((c) => c.cyberneticId),
-        weaponIds: row.weapons.map((w) => w.weaponId),
-        itemIds: row.items.map((i) => i.itemId),
-        vehicleIds: row.vehicles.map((v) => v.vehicleId),
-      }));
+        select: {
+          id: true,
+          name: true,
+          isPublic: true,
+          speed: true,
+          hitPoints: true,
+          brawn: true,
+          charm: true,
+          intelligence: true,
+          reflexes: true,
+          tech: true,
+          luck: true,
+          ownerId: true,
+          campaignId: true,
+          skills: { select: { name: true, level: true } },
+          cybernetics: { select: { cyberneticId: true } },
+          weapons: { select: { weaponId: true } },
+          items: { select: { itemId: true } },
+          vehicles: { select: { vehicleId: true } },
+        },
+      });
+
+      return mapCharacterRow(row);
     },
     async listCybernetics() {
       return prisma.cybernetic.findMany({

@@ -1,4 +1,5 @@
 import * as React from 'react';
+import Link from 'next/link';
 
 import { createYogaServer } from '@/graphql/yoga';
 import { PrivateCampaignsAndCharacters } from '../PrivateCampaignsAndCharacters';
@@ -63,7 +64,9 @@ export default async function HomePage() {
           <h2>Cybernetics</h2>
           <ul>
             {data.cybernetics.map((cybernetic) => (
-              <li key={cybernetic.id}>{cybernetic.name}</li>
+              <li key={cybernetic.id}>
+                <Link href={`/cybernetics/${cybernetic.id}`}>{cybernetic.name}</Link>
+              </li>
             ))}
           </ul>
         </section>
@@ -72,7 +75,9 @@ export default async function HomePage() {
           <h2>Weapons</h2>
           <ul>
             {data.weapons.map((weapon) => (
-              <li key={weapon.id}>{weapon.name}</li>
+              <li key={weapon.id}>
+                <Link href={`/weapons/${weapon.id}`}>{weapon.name}</Link>
+              </li>
             ))}
           </ul>
         </section>
@@ -81,7 +86,9 @@ export default async function HomePage() {
           <h2>Items</h2>
           <ul>
             {data.items.map((item) => (
-              <li key={item.id}>{item.name}</li>
+              <li key={item.id}>
+                <Link href={`/items/${item.id}`}>{item.name}</Link>
+              </li>
             ))}
           </ul>
         </section>
@@ -90,7 +97,9 @@ export default async function HomePage() {
           <h2>Vehicles</h2>
           <ul>
             {data.vehicles.map((vehicle) => (
-              <li key={vehicle.id}>{vehicle.name}</li>
+              <li key={vehicle.id}>
+                <Link href={`/vehicles/${vehicle.id}`}>{vehicle.name}</Link>
+              </li>
             ))}
           </ul>
         </section>
