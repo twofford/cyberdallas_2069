@@ -23,6 +23,10 @@ function runCapture(command: string, args: string[], env: NodeJS.ProcessEnv): Pr
     child.stdout.on('data', (chunk) => (stdout += String(chunk)));
     child.stderr.on('data', (chunk) => (stderr += String(chunk)));
 
+    child.on('error', (error) => {
+      resolve({ code: 127, stdout, stderr: `${stderr}\n${String(error)}`.trim() });
+    });
+
     child.on('close', (code) => {
       resolve({ code: code ?? 0, stdout, stderr });
     });
@@ -63,7 +67,7 @@ async function ensureDatabaseExists(env: NodeJS.ProcessEnv) {
 
   // Best-effort: create DB if it doesn't exist. If the CLI isn't available,
   // or auth fails, we let the next Prisma step surface a helpful error.
-  const args: string[] = ['--if-not-exists'];
+  const args: string[] = [];
   if (host) args.push('-h', host);
   if (port) args.push('-p', port);
   if (user) args.push('-U', user);
@@ -75,13 +79,20 @@ async function ensureDatabaseExists(env: NodeJS.ProcessEnv) {
   const combined = `${result.stdout}\n${result.stderr}`.toLowerCase();
   if (combined.includes('already exists')) return;
 
+  if (result.code === 127) {
+    console.warn(
+      `E2E: createdb not available (${formatDurationMs(nowMs() - startedAt)}). Continuing; Prisma may fail if the DB does not exist.`,
+    );
+    return;
+  }
+
   // createdb may not be available in all environments; Prisma will fail later if DB is missing.
   console.warn(`E2E: createdb did not succeed (${formatDurationMs(nowMs() - startedAt)}). Continuing anyway.`);
 }
 
 async function resetAndSeed(env: NodeJS.ProcessEnv) {
   const startedAt = nowMs();
-  // Reset DB to a known state and run seed (configured in package.json).
+  // Reset DB to a known state and run seed (configured in prisma.config.ts).
   // Using `npx --no-install` so we don't accidentally download packages each run.
   // Also skip generating Prisma client here; the repo already generates it via normal install.
   const prismaEnv: NodeJS.ProcessEnv = {

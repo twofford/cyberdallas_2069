@@ -221,7 +221,7 @@ describe('GraphQL Yoga server', () => {
     expect(body.data.characters.map((c: { id: string }) => c.id)).not.toContain('c_3');
   });
 
-  it('shows campaign-specific characters only to campaign members', async () => {
+  it("does not reveal other users' campaign characters to members", async () => {
     const yoga = createYogaServer();
     const cookie = await registerAndGetCookie(yoga, 'yoga-membership@example.com');
 
@@ -276,8 +276,8 @@ describe('GraphQL Yoga server', () => {
 
     // Still includes public archetypes.
     expect(ids).toContain('c_2');
-    // Now includes camp_1 PCs.
-    expect(ids).toContain('c_1');
+    // Does not include other users' campaign PCs/NPCs.
+    expect(ids).not.toContain('c_1');
     // camp_2 PCs still hidden.
     expect(ids).not.toContain('c_3');
   });
@@ -422,7 +422,7 @@ describe('GraphQL Yoga server', () => {
     expect(charactersBody.errors).toBeUndefined();
     const ids = (charactersBody.data.characters as Array<{ id: string }>).map((c) => c.id);
     expect(ids).toContain('c_2');
-    expect(ids).toContain('c_1');
+    expect(ids).not.toContain('c_1');
     expect(ids).not.toContain('c_3');
   });
 
@@ -613,6 +613,76 @@ describe('GraphQL Yoga server', () => {
     const yoga = createYogaServer();
     const cookie = await registerAndGetCookie(yoga, 'yoga-detailed@example.com');
 
+    // Join camp_1 so we can associate a character with it.
+    await yoga.fetch(GRAPHQL_URL, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        origin: GRAPHQL_ORIGIN,
+        cookie,
+      },
+      body: JSON.stringify({
+        query: /* GraphQL */ `
+          mutation {
+            joinCampaign(campaignId: "camp_1") {
+              id
+            }
+          }
+        `,
+      }),
+    });
+
+    const create = await yoga.fetch(GRAPHQL_URL, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        origin: GRAPHQL_ORIGIN,
+        cookie,
+      },
+      body: JSON.stringify({
+        query: /* GraphQL */ `
+          mutation Create(
+            $campaignId: ID!
+            $name: String!
+            $stats: StatsInput
+            $skills: [SkillInput!]
+            $cyberneticIds: [ID!]
+            $weaponIds: [ID!]
+            $vehicleIds: [ID!]
+          ) {
+            createCharacter(
+              campaignId: $campaignId
+              name: $name
+              stats: $stats
+              skills: $skills
+              cyberneticIds: $cyberneticIds
+              weaponIds: $weaponIds
+              vehicleIds: $vehicleIds
+            ) {
+              id
+            }
+          }
+        `,
+        variables: {
+          campaignId: 'camp_1',
+          name: 'Nova',
+          stats: { brawn: 2, charm: 4, intelligence: 6, reflexes: 7, tech: 5, luck: 1 },
+          skills: [
+            { name: 'Hacking', level: 6 },
+            { name: 'Awareness', level: 4 },
+          ],
+          cyberneticIds: ['cy_1'],
+          weaponIds: ['w_1', 'w_2'],
+          vehicleIds: ['v_1'],
+        },
+      }),
+    });
+
+    expect(create.status).toBe(200);
+    const createBody = await create.json();
+    expect(createBody.errors).toBeUndefined();
+    const createdId = createBody.data.createCharacter.id as string;
+
     const response = await yoga.fetch(GRAPHQL_URL, {
       method: 'POST',
       headers: {
@@ -690,25 +760,6 @@ describe('GraphQL Yoga server', () => {
 
     expect(body.errors).toBeUndefined();
 
-    // Join camp_1 so Nova is visible.
-    await yoga.fetch(GRAPHQL_URL, {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        origin: GRAPHQL_ORIGIN,
-        cookie,
-      },
-      body: JSON.stringify({
-        query: /* GraphQL */ `
-          mutation {
-            joinCampaign(campaignId: "camp_1") {
-              id
-            }
-          }
-        `,
-      }),
-    });
-
     const response2 = await yoga.fetch(GRAPHQL_URL, {
       method: 'POST',
       headers: {
@@ -785,9 +836,9 @@ describe('GraphQL Yoga server', () => {
     const body2 = await response2.json();
     expect(body2.errors).toBeUndefined();
 
-    const nova = (body2.data.characters as Array<{ id: string }>).find((c) => c.id === 'c_1');
+    const nova = (body2.data.characters as Array<{ id: string }>).find((c) => c.id === createdId);
     expect(nova).toEqual({
-      id: 'c_1',
+      id: createdId,
       name: 'Nova',
       campaign: {
         id: 'camp_1',

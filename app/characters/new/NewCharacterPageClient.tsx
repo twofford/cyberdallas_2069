@@ -12,6 +12,7 @@ type NamedThing = { id: string; name: string };
 
 type FormQuery = {
   campaigns: Campaign[];
+  ownerCampaigns: Array<{ id: string }>;
   cybernetics: NamedThing[];
   weapons: NamedThing[];
   items: NamedThing[];
@@ -64,6 +65,7 @@ async function graphQLFetch<T>(input: { query: string; variables?: Record<string
 export function NewCharacterPageClient() {
   const router = useRouter();
   const [campaigns, setCampaigns] = React.useState<Campaign[]>([]);
+  const [canCreatePublicArchetype, setCanCreatePublicArchetype] = React.useState(false);
   const [cybernetics, setCybernetics] = React.useState<NamedThing[]>([]);
   const [weapons, setWeapons] = React.useState<NamedThing[]>([]);
   const [items, setItems] = React.useState<NamedThing[]>([]);
@@ -71,6 +73,7 @@ export function NewCharacterPageClient() {
 
   const [campaignId, setCampaignId] = React.useState<string>('');
   const [name, setName] = React.useState('');
+  const [isPublicArchetype, setIsPublicArchetype] = React.useState(false);
 
   const [stats, setStats] = React.useState({
     brawn: 0,
@@ -119,6 +122,9 @@ export function NewCharacterPageClient() {
                 id
                 name
               }
+              ownerCampaigns {
+                id
+              }
               cybernetics {
                 id
                 name
@@ -141,6 +147,7 @@ export function NewCharacterPageClient() {
 
         if (cancelled) return;
         setCampaigns(data.campaigns);
+        setCanCreatePublicArchetype((data.ownerCampaigns?.length ?? 0) > 0);
         setCybernetics(data.cybernetics);
         setWeapons(data.weapons);
         setItems(data.items);
@@ -258,6 +265,7 @@ export function NewCharacterPageClient() {
           mutation CreateCharacter(
             $campaignId: ID
             $name: String!
+            $isPublic: Boolean
             $stats: StatsInput
             $skills: [SkillInput!]
             $cyberneticIds: [ID!]
@@ -268,6 +276,7 @@ export function NewCharacterPageClient() {
             createCharacter(
               campaignId: $campaignId
               name: $name
+              isPublic: $isPublic
               stats: $stats
               skills: $skills
               cyberneticIds: $cyberneticIds
@@ -280,8 +289,9 @@ export function NewCharacterPageClient() {
           }
         `,
         variables: {
-          campaignId: campaignId.trim() ? campaignId : null,
+          campaignId: isPublicArchetype ? null : campaignId.trim() ? campaignId : null,
           name: trimmed,
+          isPublic: isPublicArchetype ? true : null,
           stats,
           skills: skillsOut,
           cyberneticIds: [...cyberneticIds],
@@ -324,10 +334,26 @@ export function NewCharacterPageClient() {
         label="Campaign"
         ariaLabel="Campaign"
         value={campaignId}
-        disabled={busy}
+        disabled={busy || isPublicArchetype}
         options={[{ value: '', label: '(No campaign)' }, ...campaigns.map((c) => ({ value: c.id, label: c.name }))]}
         onChange={setCampaignId}
       />
+
+      {canCreatePublicArchetype ? (
+        <label>
+          <input
+            type="checkbox"
+            checked={isPublicArchetype}
+            onChange={(e) => {
+              const next = e.target.checked;
+              setIsPublicArchetype(next);
+              if (next) setCampaignId('');
+            }}
+            disabled={busy}
+          />
+          Public archetype (visible to all players)
+        </label>
+      ) : null}
 
       <h3 style={{ marginTop: 18 }}>Stats</h3>
       <div
@@ -688,7 +714,7 @@ export function NewCharacterPageClient() {
         <button
           type="submit"
           aria-label="Create character"
-          disabled={busy || !name.trim() || !campaignId}
+          disabled={busy || !name.trim()}
           onClick={() => setCreateTooltipError(null)}
           style={{ flex: '0 0 auto' }}
         >

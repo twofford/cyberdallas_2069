@@ -30,12 +30,7 @@ Append new todos to the bottom. When a todo is completed, check it off (do not r
 - [x] Ensure APP_BASE_URL matches the running dev port (3001) so invite links are correct
 - [x] Add a documented one-liner (curl or Node script) to trigger a test invite email without using the UI
 
-- [ ] Add /auth login page + redirect-to-dashboard flow
-- [x] Add /auth login page + redirect-to-dashboard flow
-
-- [x] Fix login/register forms sharing state
-
-- [x] Ignore Next/test build artifacts in git
+- [x] Allow campaign OWNERs to create public archetypes (no-campaign, `isPublic=true`) with unit + E2E coverage
 
 - [x] Add baseline global UI styling
 
@@ -49,4 +44,10 @@ Append new todos to the bottom. When a todo is completed, check it off (do not r
 
 - [x] Add extra terminal UI polish
 
-- [ ] After each completed task, append Prompt/Response to prompts.md
+- [x] After each completed task, append Prompt/Response to prompts.md
+
+- [x] Allow creating characters without campaign (dashboard + new character form)
+
+- [x] Hide other users' campaign characters; label public as Archetype only
+
+- [x] Allow editing characters from character detail page

@@ -280,6 +280,7 @@ export function createYogaServer() {
         id: ID!
         name: String!
         isPublic: Boolean!
+        canEdit: Boolean!
         speed: Int!
         hitPoints: Int!
         campaign: Campaign
@@ -331,12 +332,22 @@ export function createYogaServer() {
         createCharacter(
           campaignId: ID
           name: String!
+          isPublic: Boolean
           stats: StatsInput
           skills: [SkillInput!]
           cyberneticIds: [ID!]
           weaponIds: [ID!]
           itemIds: [ID!]
           vehicleIds: [ID!]
+        ): Character!
+        updateCharacter(
+          id: ID!
+          name: String
+          stats: StatsInput
+          skills: [SkillInput!]
+          cyberneticIds: [ID!]
+          weaponIds: [ID!]
+          itemIds: [ID!]
         ): Character!
         createCampaignInvite(campaignId: ID!, email: String!): CampaignInviteToken!
         acceptCampaignInvite(token: String!): Campaign!
@@ -436,6 +447,7 @@ export function createYogaServer() {
           args: {
             campaignId?: string | null;
             name: string;
+            isPublic?: boolean | null;
             stats?: Partial<StatsRecord> | null;
             skills?: Array<{ name: string; level: number }> | null;
             cyberneticIds?: string[] | null;
@@ -450,8 +462,26 @@ export function createYogaServer() {
           const campaignId = campaignIdRaw === null || campaignIdRaw === undefined ? null : String(campaignIdRaw).trim();
           const campaignIdOrNull = campaignId?.length ? campaignId : null;
           const name = String(args.name ?? '').trim();
+          const isPublic = args.isPublic === true;
 
           if (!name) throw new GraphQLError('Invalid character name');
+
+          if (isPublic && campaignIdOrNull) {
+            throw new GraphQLError('Public characters cannot belong to a campaign');
+          }
+
+          if (isPublic) {
+            const campaigns = await ctx.dataSource.listCampaignsForUser(user.id);
+            let isOwnerSomewhere = false;
+            for (const campaign of campaigns) {
+              const role = await ctx.dataSource.getCampaignMembershipRole({ userId: user.id, campaignId: campaign.id });
+              if (role === 'OWNER') {
+                isOwnerSomewhere = true;
+                break;
+              }
+            }
+            if (!isOwnerSomewhere) throw new GraphQLError('Not authorized');
+          }
 
           if (campaignIdOrNull) {
             const campaign = await ctx.dataSource.getCampaignById(campaignIdOrNull);
@@ -539,6 +569,7 @@ export function createYogaServer() {
             ownerId: user.id,
             campaignId: campaignIdOrNull,
             name,
+            isPublic,
             stats: hasAnyStat ? stats : undefined,
             skills: skills.length ? skills : undefined,
             cyberneticIds: cyberneticIds.length ? cyberneticIds : undefined,
@@ -546,6 +577,130 @@ export function createYogaServer() {
             itemIds: itemIds.length ? itemIds : undefined,
             vehicleIds: vehicleIds.length ? vehicleIds : undefined,
           });
+        },
+
+        updateCharacter: async (
+          _parent: unknown,
+          args: {
+            id: string;
+            name?: string | null;
+            stats?: Partial<StatsRecord> | null;
+            skills?: Array<{ name: string; level: number }> | null;
+            cyberneticIds?: string[] | null;
+            weaponIds?: string[] | null;
+            itemIds?: string[] | null;
+          },
+          ctx: YogaContext,
+        ) => {
+          const user = requireUser(ctx);
+          const id = String(args.id ?? '').trim();
+          if (!id) throw new GraphQLError('Character not found');
+
+          const nameRaw = args.name;
+          const name = nameRaw === null || nameRaw === undefined ? undefined : String(nameRaw).trim();
+          if (name !== undefined && !name) throw new GraphQLError('Invalid character name');
+
+          function parseOptionalStat(value: unknown): number | undefined {
+            if (value === null || value === undefined) return undefined;
+            if (typeof value !== 'number' || !Number.isFinite(value) || !Number.isInteger(value)) return undefined;
+            if (value < 0 || value > 10) return undefined;
+            return value;
+          }
+
+          const statsIn = (args.stats ?? {}) as Partial<Record<keyof StatsRecord, unknown>>;
+          const stats: Partial<StatsRecord> = {
+            brawn: parseOptionalStat(statsIn.brawn),
+            charm: parseOptionalStat(statsIn.charm),
+            intelligence: parseOptionalStat(statsIn.intelligence),
+            reflexes: parseOptionalStat(statsIn.reflexes),
+            tech: parseOptionalStat(statsIn.tech),
+            luck: parseOptionalStat(statsIn.luck),
+          };
+          for (const [key, value] of Object.entries(stats)) {
+            if (value === undefined) continue;
+            if (typeof value !== 'number') throw new GraphQLError(`Invalid stat: ${key}`);
+          }
+
+          const hasAnyStat = Object.values(stats).some((v) => typeof v === 'number');
+
+          const skillsIn = args.skills === null || args.skills === undefined ? undefined : Array.isArray(args.skills) ? args.skills : [];
+          const skills = (skillsIn ?? [])
+            .map((s) => {
+              const maybe = s as { name?: unknown; level?: unknown };
+              const rawLevel = maybe?.level;
+              const level = typeof rawLevel === 'number' ? rawLevel : Number.NaN;
+              return { name: String(maybe?.name ?? '').trim(), level };
+            })
+            .filter((s) => s.name.length > 0);
+
+          if (skillsIn !== undefined) {
+            const seenSkillNames = new Set<string>();
+            for (const skill of skills) {
+              if (skill.name.length > 64) throw new GraphQLError('Invalid skill name');
+              if (typeof skill.level !== 'number' || !Number.isInteger(skill.level) || skill.level < 0 || skill.level > 10) {
+                throw new GraphQLError('Invalid skill level');
+              }
+              const normalized = skill.name.toLowerCase();
+              if (seenSkillNames.has(normalized)) throw new GraphQLError('Duplicate skill');
+              seenSkillNames.add(normalized);
+
+              const canonical = PREDEFINED_SKILL_BY_LOWER.get(normalized);
+              if (canonical) skill.name = canonical;
+            }
+          }
+
+          const cyberneticIdsIn = args.cyberneticIds === null || args.cyberneticIds === undefined ? undefined : args.cyberneticIds;
+          const weaponIdsIn = args.weaponIds === null || args.weaponIds === undefined ? undefined : args.weaponIds;
+          const itemIdsIn = args.itemIds === null || args.itemIds === undefined ? undefined : args.itemIds;
+
+          const cyberneticIds = (Array.isArray(cyberneticIdsIn) ? cyberneticIdsIn : []).map(String).filter(Boolean);
+          const weaponIds = (Array.isArray(weaponIdsIn) ? weaponIdsIn : []).map(String).filter(Boolean);
+          const itemIds = (Array.isArray(itemIdsIn) ? itemIdsIn : []).map(String).filter(Boolean);
+
+          async function validateIds(kind: string, ids: string[], allowedIds: Set<string>) {
+            for (const id of ids) {
+              if (!allowedIds.has(id)) throw new GraphQLError(`Unknown ${kind}: ${id}`);
+            }
+          }
+
+          if (cyberneticIdsIn !== undefined) {
+            const allowed = new Set((await ctx.dataSource.listCybernetics()).map((c) => c.id));
+            await validateIds('cybernetic', cyberneticIds, allowed);
+          }
+          if (weaponIdsIn !== undefined) {
+            const allowed = new Set((await ctx.dataSource.listWeapons()).map((w) => w.id));
+            await validateIds('weapon', weaponIds, allowed);
+          }
+          if (itemIdsIn !== undefined) {
+            const allowed = new Set((await ctx.dataSource.listItems()).map((i) => i.id));
+            await validateIds('item', itemIds, allowed);
+          }
+
+          const hasAnyChange =
+            name !== undefined ||
+            hasAnyStat ||
+            skillsIn !== undefined ||
+            cyberneticIdsIn !== undefined ||
+            weaponIdsIn !== undefined ||
+            itemIdsIn !== undefined;
+          if (!hasAnyChange) throw new GraphQLError('No changes');
+
+          try {
+            return await ctx.dataSource.updateCharacter({
+              id,
+              ownerId: user.id,
+              ...(name !== undefined ? { name } : {}),
+              ...(hasAnyStat ? { stats } : {}),
+              ...(skillsIn !== undefined ? { skills } : {}),
+              ...(cyberneticIdsIn !== undefined ? { cyberneticIds } : {}),
+              ...(weaponIdsIn !== undefined ? { weaponIds } : {}),
+              ...(itemIdsIn !== undefined ? { itemIds } : {}),
+            });
+          } catch (error) {
+            if (error instanceof Error && error.message === 'CHARACTER_NOT_FOUND') throw new GraphQLError('Character not found');
+            if (error instanceof Error && error.message === 'NOT_AUTHORIZED') throw new GraphQLError('Not authorized');
+            throw error;
+          }
         },
 
         createCampaignInvite: async (
@@ -606,6 +761,11 @@ export function createYogaServer() {
       },
       Character: {
         isPublic: (character: CharacterRecord) => character.isPublic ?? false,
+        canEdit: (character: CharacterRecord, _args: unknown, ctx: YogaContext) => {
+          const user = ctx.user;
+          if (!user) return false;
+          return character.ownerId === user.id;
+        },
         speed: (character: CharacterRecord) => character.speed ?? 30,
         hitPoints: (character: CharacterRecord) => character.hitPoints ?? 5,
         campaign: async (character: CharacterRecord, _args: unknown, ctx: YogaContext) => {

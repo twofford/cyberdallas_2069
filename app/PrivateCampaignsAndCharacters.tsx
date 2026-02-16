@@ -8,7 +8,7 @@ type Campaign = { id: string; name: string };
 
 type AuthUser = { id: string; email: string };
 
-type Character = { id: string; name: string; campaign: { id: string; name: string } | null };
+type Character = { id: string; name: string; isPublic: boolean; campaign: { id: string; name: string } | null };
 
 type PrivateData = {
   campaigns: Campaign[];
@@ -61,6 +61,7 @@ export function PrivateCampaignsAndCharacters() {
           characters {
             id
             name
+            isPublic
             campaign {
               id
               name
@@ -221,21 +222,17 @@ export function PrivateCampaignsAndCharacters() {
           <p style={{ color: 'crimson' }}>{error}</p>
         ) : (
           <>
-            {(data?.campaigns?.length ?? 0) === 0 ? (
-              <p>Join a campaign to create characters.</p>
-            ) : (
-              <p>
-                <button type="button" onClick={() => router.push('/characters/new')}>
-                  New character
-                </button>
-              </p>
-            )}
+            <p>
+              <button type="button" onClick={() => router.push('/characters/new')}>
+                New character
+              </button>
+            </p>
 
             <ul>
               {(data?.characters ?? []).map((character) => (
                 <li key={character.id}>
                   <Link href={`/characters/${character.id}`}>{character.name}</Link> —{' '}
-                  {character.campaign?.name ?? 'Archetype'}
+                  {character.campaign?.name ?? (character.isPublic ? 'Archetype' : 'No campaign')}
                 </li>
               ))}
             </ul>

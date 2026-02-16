@@ -112,6 +112,10 @@ export const campaigns: CampaignRecord[] = [
     id: 'camp_4',
     name: 'Midnight Circuit',
   },
+  {
+    id: 'camp_5',
+    name: 'Ghost Protocol',
+  },
 ];
 
 export const cybernetics: CyberneticRecord[] = [

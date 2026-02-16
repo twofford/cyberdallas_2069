@@ -31,12 +31,23 @@ export type DataSource = {
     ownerId: string;
     campaignId?: string | null;
     name: string;
+    isPublic?: boolean;
     stats?: Partial<StatsRecord>;
     skills?: SkillRecord[];
     cyberneticIds?: string[];
     weaponIds?: string[];
     itemIds?: string[];
     vehicleIds?: string[];
+  }): Promise<CharacterRecord>;
+  updateCharacter(input: {
+    id: string;
+    ownerId: string;
+    name?: string;
+    stats?: Partial<StatsRecord>;
+    skills?: SkillRecord[];
+    cyberneticIds?: string[];
+    weaponIds?: string[];
+    itemIds?: string[];
   }): Promise<CharacterRecord>;
   listCybernetics(): Promise<CyberneticRecord[]>;
   listWeapons(): Promise<WeaponRecord[]>;
@@ -121,11 +132,6 @@ function createInMemoryDataSource(): DataSource {
     return character.ownerId === userId;
   }
 
-  function isCharacterInMemberCampaign(character: CharacterRecord, userId: string): boolean {
-    if (!character.campaignId) return false;
-    return getMembershipsByUser(userId).has(character.campaignId);
-  }
-
   return {
     kind: 'inMemory',
     async getCampaignById(id: string) {
@@ -142,13 +148,14 @@ function createInMemoryDataSource(): DataSource {
       return characterStore;
     },
     async listCharactersForUser(userId: string) {
-      return characterStore.filter((c) => isPublicCharacter(c) || isOwnedByUser(c, userId) || isCharacterInMemberCampaign(c, userId));
+      return characterStore.filter((c) => isPublicCharacter(c) || isOwnedByUser(c, userId));
     },
 
     async createCharacter(input: {
       ownerId: string;
       campaignId?: string | null;
       name: string;
+      isPublic?: boolean;
       stats?: Partial<StatsRecord>;
       skills?: SkillRecord[];
       cyberneticIds?: string[];
@@ -175,7 +182,7 @@ function createInMemoryDataSource(): DataSource {
       const character: CharacterRecord = {
         id: `c_${crypto.randomUUID()}`,
         name: input.name,
-        isPublic: false,
+        isPublic: input.isPublic ?? false,
         ownerId: input.ownerId,
         campaignId: campaignId ?? undefined,
         speed: 30,
@@ -190,6 +197,39 @@ function createInMemoryDataSource(): DataSource {
 
       characterStore.push(character);
       return character;
+    },
+
+    async updateCharacter(input: {
+      id: string;
+      ownerId: string;
+      name?: string;
+      stats?: Partial<StatsRecord>;
+      skills?: SkillRecord[];
+      cyberneticIds?: string[];
+      weaponIds?: string[];
+      itemIds?: string[];
+    }) {
+      const index = characterStore.findIndex((c) => c.id === input.id);
+      if (index === -1) throw new Error('CHARACTER_NOT_FOUND');
+
+      const existing = characterStore[index]!;
+      if (existing.ownerId !== input.ownerId) throw new Error('NOT_AUTHORIZED');
+
+      const next: CharacterRecord = {
+        ...existing,
+        name: input.name !== undefined ? input.name : existing.name,
+        stats: {
+          ...(existing.stats ?? { brawn: 0, charm: 0, intelligence: 0, reflexes: 0, tech: 0, luck: 0 }),
+          ...(input.stats ?? {}),
+        },
+        skills: input.skills !== undefined ? input.skills : (existing.skills ?? []),
+        cyberneticIds: input.cyberneticIds !== undefined ? input.cyberneticIds : (existing.cyberneticIds ?? []),
+        weaponIds: input.weaponIds !== undefined ? input.weaponIds : (existing.weaponIds ?? []),
+        itemIds: input.itemIds !== undefined ? input.itemIds : (existing.itemIds ?? []),
+      };
+
+      characterStore[index] = next;
+      return next;
     },
     async listCybernetics() {
       return cybernetics;
@@ -389,13 +429,6 @@ function createPrismaDataSource(): DataSource {
           OR: [
             { isPublic: true },
             { ownerId: userId },
-            {
-              campaign: {
-                memberships: {
-                  some: { userId },
-                },
-              },
-            },
           ],
         },
         select: {
@@ -427,6 +460,7 @@ function createPrismaDataSource(): DataSource {
       ownerId: string;
       campaignId?: string | null;
       name: string;
+      isPublic?: boolean;
       stats?: Partial<StatsRecord>;
       skills?: SkillRecord[];
       cyberneticIds?: string[];
@@ -438,7 +472,7 @@ function createPrismaDataSource(): DataSource {
       const row = await prisma.character.create({
         data: {
           name: input.name,
-          isPublic: false,
+          isPublic: input.isPublic ?? false,
           ownerId: input.ownerId,
           campaignId: input.campaignId ?? null,
           ...(stats.brawn !== undefined ? { brawn: stats.brawn } : {}),
@@ -487,6 +521,99 @@ function createPrismaDataSource(): DataSource {
           items: { select: { itemId: true } },
           vehicles: { select: { vehicleId: true } },
         },
+      });
+
+      return mapCharacterRow(row);
+    },
+
+    async updateCharacter(input: {
+      id: string;
+      ownerId: string;
+      name?: string;
+      stats?: Partial<StatsRecord>;
+      skills?: SkillRecord[];
+      cyberneticIds?: string[];
+      weaponIds?: string[];
+      itemIds?: string[];
+    }) {
+      const existing = await prisma.character.findUnique({ where: { id: input.id }, select: { ownerId: true } });
+      if (!existing) throw new Error('CHARACTER_NOT_FOUND');
+      if (existing.ownerId !== input.ownerId) throw new Error('NOT_AUTHORIZED');
+
+      const stats = input.stats ?? {};
+      const row = await prisma.$transaction(async (tx) => {
+        if (input.skills !== undefined) {
+          await tx.characterSkill.deleteMany({ where: { characterId: input.id } });
+          if (input.skills.length > 0) {
+            await tx.characterSkill.createMany({
+              data: input.skills.map((skill) => ({
+                characterId: input.id,
+                name: skill.name,
+                level: skill.level,
+              })),
+            });
+          }
+        }
+
+        if (input.cyberneticIds !== undefined) {
+          await tx.characterCybernetic.deleteMany({ where: { characterId: input.id } });
+          if (input.cyberneticIds.length > 0) {
+            await tx.characterCybernetic.createMany({
+              data: input.cyberneticIds.map((cyberneticId) => ({ characterId: input.id, cyberneticId })),
+            });
+          }
+        }
+
+        if (input.weaponIds !== undefined) {
+          await tx.characterWeapon.deleteMany({ where: { characterId: input.id } });
+          if (input.weaponIds.length > 0) {
+            await tx.characterWeapon.createMany({
+              data: input.weaponIds.map((weaponId) => ({ characterId: input.id, weaponId })),
+            });
+          }
+        }
+
+        if (input.itemIds !== undefined) {
+          await tx.characterItem.deleteMany({ where: { characterId: input.id } });
+          if (input.itemIds.length > 0) {
+            await tx.characterItem.createMany({
+              data: input.itemIds.map((itemId) => ({ characterId: input.id, itemId })),
+            });
+          }
+        }
+
+        return tx.character.update({
+          where: { id: input.id },
+          data: {
+            ...(input.name !== undefined ? { name: input.name } : {}),
+            ...(stats.brawn !== undefined ? { brawn: stats.brawn } : {}),
+            ...(stats.charm !== undefined ? { charm: stats.charm } : {}),
+            ...(stats.intelligence !== undefined ? { intelligence: stats.intelligence } : {}),
+            ...(stats.reflexes !== undefined ? { reflexes: stats.reflexes } : {}),
+            ...(stats.tech !== undefined ? { tech: stats.tech } : {}),
+            ...(stats.luck !== undefined ? { luck: stats.luck } : {}),
+          },
+          select: {
+            id: true,
+            name: true,
+            isPublic: true,
+            speed: true,
+            hitPoints: true,
+            brawn: true,
+            charm: true,
+            intelligence: true,
+            reflexes: true,
+            tech: true,
+            luck: true,
+            ownerId: true,
+            campaignId: true,
+            skills: { select: { name: true, level: true } },
+            cybernetics: { select: { cyberneticId: true } },
+            weapons: { select: { weaponId: true } },
+            items: { select: { itemId: true } },
+            vehicles: { select: { vehicleId: true } },
+          },
+        });
       });
 
       return mapCharacterRow(row);

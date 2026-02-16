@@ -275,3 +275,15 @@
 
 - Prompt (2026-02-14): Let’s do the custom select, then.
 - Response: Implemented a custom Campaign select ([app/ui/Select.tsx](app/ui/Select.tsx)) so the opened dropdown list can be fully styled to match the terminal theme on macOS. Wired it into the character creation form, added global theme CSS for the select trigger/listbox/options, updated Playwright E2E to click the desired campaign option, and verified `npm test` + `npm run test:e2e` pass.
+
+- Prompt (2026-02-15 00:51 UTC): Fix new character creation so a user can submit a character even if they don’t belong to any campaign (campaign should be optional).
+- Response: Read `context.md` and reference docs, added a failing Playwright regression test for creating a character with “(No campaign)”, updated the dashboard to always show the “New character” button for signed-in users (even with zero campaign memberships), fixed the new character form submit button to not require a campaign selection, and re-ran Playwright E2E to green.
+
+- Prompt (2026-02-15 00:56 UTC): Update the UI so a player-owned character with no campaign does not show “Archetype”, and adjust character visibility so players can see public “generic” characters but not a GM’s private bosses/NPCs.
+- Response: Added a failing unit test proving campaign membership should not reveal other users’ characters; updated the datasource so `characters` returns only public characters (`isPublic=true`) plus characters owned by the current user (no longer includes all characters in member campaigns); updated dashboard + character detail labels so only public no-campaign characters show “Archetype” while owned no-campaign characters show “No campaign”; updated Yoga tests accordingly; ran unit + Playwright E2E suites to green.
+
+- Prompt (2026-02-15 01:07 UTC): Add a way for GMs/campaign owners to create public “generic” characters (archetypes) from the new character form, and confirm whether the data model already supports different player types.
+- Response: Confirmed the data model uses per-campaign roles (`CampaignMembership.role`: OWNER vs MEMBER) rather than a global “GM user type”; implemented `createCharacter(isPublic: Boolean)` with owner-only authorization and a constraint that public characters can’t belong to a campaign; threaded `isPublic` through both in-memory + Prisma datasources; added a minimal owner-only “Public archetype (visible to all players)” checkbox to the new character form; added unit + Playwright coverage and re-ran suites to green.
+
+- Prompt (2026-02-15 04:54 UTC): Add the ability to edit characters from the character detail page.
+- Response: Added an owner-only `updateCharacter` GraphQL mutation (edit name + stats) with unit tests; implemented persistence for both in-memory and Prisma datasources; exposed a computed `canEdit` field so the UI only shows edit controls for editable characters; added an Edit/Save flow on the character page and a Playwright E2E test verifying edits persist after reload; re-ran unit and E2E suites to green.

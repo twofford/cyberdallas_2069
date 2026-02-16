@@ -211,6 +211,145 @@ test('users can create new characters in their campaigns', async ({ page }) => {
   await expect(page.getByRole('heading', { name: 'Stats' })).toBeVisible();
 });
 
+test('users can create new characters with no campaign', async ({ page }) => {
+  const email = `create-char-solo+${Date.now()}@example.com`;
+  const password = 'correct-horse-battery-staple';
+
+  await page.goto('/auth');
+  await switchToRegister(page);
+
+  const registerForm = page.locator('form', { has: page.getByRole('heading', { name: 'Register' }) });
+  await registerForm.getByLabel('Email').fill(email);
+  await registerForm.getByLabel('Password').fill(password);
+  await registerForm.getByRole('button', { name: 'Register', exact: true }).click();
+
+  await expect(page).toHaveURL('/home');
+
+  await page.getByRole('button', { name: /new character/i }).click();
+  await expect(page).toHaveURL(/\/characters\/new$/);
+
+  await page.getByLabel('Name', { exact: true }).fill('Solo');
+
+  const campaignButton = page.getByRole('button', { name: 'Campaign', exact: true });
+  await expect(campaignButton).toBeVisible();
+
+  const createButton = page.locator('form').getByRole('button', { name: /create character/i });
+  await expect(createButton).toBeEnabled();
+  await createButton.click();
+
+  await expect(page).toHaveURL(/\/characters\//);
+  await expect(page.getByRole('heading', { name: /solo/i })).toBeVisible();
+});
+
+test('users can edit their characters from the character page', async ({ page }) => {
+  const email = `edit-char+${Date.now()}@example.com`;
+  const password = 'correct-horse-battery-staple';
+
+  await page.goto('/auth');
+  await switchToRegister(page);
+
+  const registerForm = page.locator('form', { has: page.getByRole('heading', { name: 'Register' }) });
+  await registerForm.getByLabel('Email').fill(email);
+  await registerForm.getByLabel('Password').fill(password);
+  await registerForm.getByRole('button', { name: 'Register', exact: true }).click();
+
+  await expect(page).toHaveURL('/home');
+
+  await page.getByRole('button', { name: /new character/i }).click();
+  await expect(page).toHaveURL(/\/characters\/new$/);
+
+  await page.getByLabel('Name', { exact: true }).fill('Editable');
+
+  const createButton = page.locator('form').getByRole('button', { name: /create character/i });
+  await expect(createButton).toBeEnabled();
+  await createButton.click();
+
+  await expect(page).toHaveURL(/\/characters\//);
+  await expect(page.getByRole('heading', { name: /editable/i })).toBeVisible();
+
+  await page.getByRole('button', { name: /edit/i }).click();
+
+  await page.getByLabel('Name').fill('Edited');
+  await page.getByLabel('Brawn').fill('7');
+
+  await page.getByLabel('Hacking', { exact: true }).fill('4');
+  await page.getByRole('checkbox', { name: 'Reflex Booster', exact: true }).check();
+  await page.getByRole('checkbox', { name: 'Mono-Katana', exact: true }).check();
+  await page.getByRole('checkbox', { name: 'Cyberdeck (Starter)', exact: true }).check();
+
+  await page.getByRole('button', { name: /save/i }).click();
+
+  await expect(page.getByRole('heading', { name: /edited/i })).toBeVisible();
+  await expect(page.getByText('Brawn: 7')).toBeVisible();
+  await expect(page.getByText('Hacking: 4')).toBeVisible();
+  await expect(page.getByText('Reflex Booster')).toBeVisible();
+  await expect(page.getByText('Mono-Katana')).toBeVisible();
+  await expect(page.getByText('Cyberdeck (Starter)')).toBeVisible();
+
+  await page.reload();
+  await expect(page.getByRole('heading', { name: /edited/i })).toBeVisible();
+  await expect(page.getByText('Brawn: 7')).toBeVisible();
+  await expect(page.getByText('Hacking: 4')).toBeVisible();
+  await expect(page.getByText('Reflex Booster')).toBeVisible();
+  await expect(page.getByText('Mono-Katana')).toBeVisible();
+  await expect(page.getByText('Cyberdeck (Starter)')).toBeVisible();
+});
+
+test('campaign owners can create public archetypes visible to other users', async ({ page }) => {
+  const ownerEmail = `gm+${Date.now()}@example.com`;
+  const playerEmail = `player+${Date.now()}@example.com`;
+  const password = 'correct-horse-battery-staple';
+
+  await page.goto('/auth');
+  await switchToRegister(page);
+
+  const registerForm = page.locator('form', { has: page.getByRole('heading', { name: 'Register' }) });
+  await registerForm.getByLabel('Email').fill(ownerEmail);
+  await registerForm.getByLabel('Password').fill(password);
+  await registerForm.getByRole('button', { name: 'Register', exact: true }).click();
+  await expect(page).toHaveURL('/home');
+
+  // Become owner of a campaign so the public archetype toggle is available.
+  await joinCampaignBackdoor({ request: page.request, campaignId: 'camp_5' });
+  await page.reload();
+
+  const campaignsSection = page.locator('section', { has: page.getByRole('heading', { name: 'Campaigns' }) });
+  await expect(campaignsSection.getByText('Ghost Protocol')).toBeVisible();
+  // Owner-only: invite form should be present.
+  await expect(campaignsSection.getByLabel('Invite email')).toBeVisible();
+
+  await page.getByRole('button', { name: /new character/i }).click();
+  await expect(page).toHaveURL(/\/characters\/new$/);
+
+  await page.getByLabel('Name', { exact: true }).fill('Public Archetype');
+  const publicLabel = page.locator('label', { hasText: 'Public archetype (visible to all players)' });
+  await expect(publicLabel).toBeVisible();
+  await publicLabel.locator('input[type="checkbox"]').check();
+
+  const createButton = page.locator('form').getByRole('button', { name: /create character/i });
+  await expect(createButton).toBeEnabled();
+  await createButton.click();
+
+  await expect(page).toHaveURL(/\/characters\//);
+  await expect(page.getByRole('heading', { name: /public archetype/i })).toBeVisible();
+  await expect(page.getByText('Archetype', { exact: true })).toBeVisible();
+
+  // Sign out and register a different user; the public archetype should be visible.
+  await page.goto('/home');
+  await page.getByRole('button', { name: /sign out/i }).click();
+
+  await expect(page).toHaveURL('/auth');
+  await switchToRegister(page);
+  const registerForm2 = page.locator('form', { has: page.getByRole('heading', { name: 'Register' }) });
+  await registerForm2.getByLabel('Email').fill(playerEmail);
+  await registerForm2.getByLabel('Password').fill(password);
+  await registerForm2.getByRole('button', { name: 'Register', exact: true }).click();
+
+  await expect(page).toHaveURL('/home');
+  const charactersSection = page.locator('section', { has: page.getByRole('heading', { name: 'Characters' }) });
+  await expect(charactersSection.getByRole('link', { name: 'Public Archetype', exact: true })).toBeVisible();
+});
+
 test('login and register forms do not share input state', async ({ page }) => {
   await page.goto('/auth');
 
