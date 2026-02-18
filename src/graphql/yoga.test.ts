@@ -153,6 +153,396 @@ describe('GraphQL Yoga server', () => {
     expect(meAfterBody.data.me).toBeNull();
   });
 
+  it('treats configured admin emails as admins (can delete any character)', async () => {
+    const yoga = createYogaServer();
+
+    const adminEmail = `admin+${Date.now()}@example.com`;
+    process.env.CYBERDALLAS_ADMIN_EMAILS = adminEmail;
+
+    const ownerCookie = await registerAndGetCookie(yoga, `owner+${Date.now()}@example.com`);
+    const adminCookie = await registerAndGetCookie(yoga, adminEmail);
+
+    const create = await yoga.fetch(GRAPHQL_URL, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        origin: GRAPHQL_ORIGIN,
+        cookie: ownerCookie,
+      },
+      body: JSON.stringify({
+        query: /* GraphQL */ `
+          mutation Create($name: String!) {
+            createCharacter(name: $name) {
+              id
+            }
+          }
+        `,
+        variables: { name: 'Owned Character' },
+      }),
+    });
+    expect(create.status).toBe(200);
+    const createBody = await create.json();
+    expect(createBody.errors).toBeUndefined();
+    const characterId = createBody.data.createCharacter.id as string;
+    expect(characterId).toMatch(/^c_/);
+
+    const del = await yoga.fetch(GRAPHQL_URL, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        origin: GRAPHQL_ORIGIN,
+        cookie: adminCookie,
+      },
+      body: JSON.stringify({
+        query: /* GraphQL */ `
+          mutation Delete($id: ID!) {
+            deleteCharacter(id: $id)
+          }
+        `,
+        variables: { id: characterId },
+      }),
+    });
+    expect(del.status).toBe(200);
+    const delBody = await del.json();
+    expect(delBody.errors).toBeUndefined();
+    expect(delBody.data.deleteCharacter).toBe(true);
+  });
+
+  it('allows admins to create campaign invites without ownership', async () => {
+    const yoga = createYogaServer();
+
+    const adminEmail = `invite-admin+${Date.now()}@example.com`;
+    process.env.CYBERDALLAS_ADMIN_EMAILS = adminEmail;
+    const adminCookie = await registerAndGetCookie(yoga, adminEmail);
+
+    const invite = await yoga.fetch(GRAPHQL_URL, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        origin: GRAPHQL_ORIGIN,
+        cookie: adminCookie,
+      },
+      body: JSON.stringify({
+        query: /* GraphQL */ `
+          mutation Invite($campaignId: ID!, $email: String!) {
+            createCampaignInvite(campaignId: $campaignId, email: $email) {
+              token
+              expiresAt
+            }
+          }
+        `,
+        variables: { campaignId: 'camp_1', email: `invitee+${Date.now()}@example.com` },
+      }),
+    });
+    expect(invite.status).toBe(200);
+    const inviteBody = await invite.json();
+    expect(inviteBody.errors).toBeUndefined();
+    expect(inviteBody.data.createCampaignInvite.token).toBeTruthy();
+    expect(inviteBody.data.createCampaignInvite.expiresAt).toMatch(/\d{4}-\d{2}-\d{2}T/);
+  });
+
+  it('allows signed-in users to create campaigns with startingMoney', async () => {
+    const yoga = createYogaServer();
+
+    const cookie = await registerAndGetCookie(yoga, `create-campaign+${Date.now()}@example.com`);
+
+    const create = await yoga.fetch(GRAPHQL_URL, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        origin: GRAPHQL_ORIGIN,
+        cookie,
+      },
+      body: JSON.stringify({
+        query: /* GraphQL */ `
+          mutation CreateCampaign($name: String!, $startingMoney: Int) {
+            createCampaign(name: $name, startingMoney: $startingMoney) {
+              id
+              name
+              startingMoney
+            }
+          }
+        `,
+        variables: { name: 'New Campaign', startingMoney: 500 },
+      }),
+    });
+
+    expect(create.status).toBe(200);
+    const createBody = await create.json();
+    expect(createBody.errors).toBeUndefined();
+    expect(createBody.data.createCampaign.name).toBe('New Campaign');
+    expect(createBody.data.createCampaign.startingMoney).toBe(500);
+
+    const list = await yoga.fetch(GRAPHQL_URL, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        origin: GRAPHQL_ORIGIN,
+        cookie,
+      },
+      body: JSON.stringify({
+        query: /* GraphQL */ `
+          query Campaigns {
+            campaigns {
+              id
+              name
+            }
+          }
+        `,
+      }),
+    });
+
+    expect(list.status).toBe(200);
+    const listBody = await list.json();
+    expect(listBody.errors).toBeUndefined();
+    const found = (listBody.data.campaigns as Array<{ id: string; name: string }>).find((c) => c.id === createBody.data.createCampaign.id);
+    expect(found?.name).toBe('New Campaign');
+  });
+
+  it('allows campaign owners to update campaign name and startingMoney', async () => {
+    const yoga = createYogaServer();
+
+    const cookie = await registerAndGetCookie(yoga, `update-campaign+${Date.now()}@example.com`);
+
+    const create = await yoga.fetch(GRAPHQL_URL, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        origin: GRAPHQL_ORIGIN,
+        cookie,
+      },
+      body: JSON.stringify({
+        query: /* GraphQL */ `
+          mutation CreateCampaign($name: String!, $startingMoney: Int) {
+            createCampaign(name: $name, startingMoney: $startingMoney) {
+              id
+              name
+              startingMoney
+            }
+          }
+        `,
+        variables: { name: 'Before', startingMoney: 100 },
+      }),
+    });
+    expect(create.status).toBe(200);
+    const createBody = await create.json();
+    expect(createBody.errors).toBeUndefined();
+    const campaignId = createBody.data.createCampaign.id as string;
+
+    const update = await yoga.fetch(GRAPHQL_URL, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        origin: GRAPHQL_ORIGIN,
+        cookie,
+      },
+      body: JSON.stringify({
+        query: /* GraphQL */ `
+          mutation UpdateCampaign($campaignId: ID!, $name: String, $startingMoney: Int) {
+            updateCampaign(campaignId: $campaignId, name: $name, startingMoney: $startingMoney) {
+              id
+              name
+              startingMoney
+            }
+          }
+        `,
+        variables: { campaignId, name: 'After', startingMoney: 250 },
+      }),
+    });
+
+    expect(update.status).toBe(200);
+    const updateBody = await update.json();
+    expect(updateBody.errors).toBeUndefined();
+    expect(updateBody.data.updateCampaign.id).toBe(campaignId);
+    expect(updateBody.data.updateCampaign.name).toBe('After');
+    expect(updateBody.data.updateCampaign.startingMoney).toBe(250);
+  });
+
+  it('rejects campaign updates by non-owners', async () => {
+    const yoga = createYogaServer();
+
+    const ownerCookie = await registerAndGetCookie(yoga, `update-owner+${Date.now()}@example.com`);
+    const otherCookie = await registerAndGetCookie(yoga, `update-other+${Date.now()}@example.com`);
+
+    const create = await yoga.fetch(GRAPHQL_URL, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        origin: GRAPHQL_ORIGIN,
+        cookie: ownerCookie,
+      },
+      body: JSON.stringify({
+        query: /* GraphQL */ `
+          mutation CreateCampaign($name: String!, $startingMoney: Int) {
+            createCampaign(name: $name, startingMoney: $startingMoney) {
+              id
+            }
+          }
+        `,
+        variables: { name: 'Owned Campaign', startingMoney: 0 },
+      }),
+    });
+    expect(create.status).toBe(200);
+    const createBody = await create.json();
+    expect(createBody.errors).toBeUndefined();
+    const campaignId = createBody.data.createCampaign.id as string;
+
+    const update = await yoga.fetch(GRAPHQL_URL, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        origin: GRAPHQL_ORIGIN,
+        cookie: otherCookie,
+      },
+      body: JSON.stringify({
+        query: /* GraphQL */ `
+          mutation UpdateCampaign($campaignId: ID!, $name: String) {
+            updateCampaign(campaignId: $campaignId, name: $name) {
+              id
+            }
+          }
+        `,
+        variables: { campaignId, name: 'Hacked' },
+      }),
+    });
+
+    expect(update.status).toBe(200);
+    const updateBody = await update.json();
+    expect(updateBody.data).toBeNull();
+    expect(updateBody.errors?.[0]?.message ?? '').toMatch(/not authorized/i);
+  });
+
+  it('allows campaign owners to delete campaigns', async () => {
+    const yoga = createYogaServer();
+
+    const cookie = await registerAndGetCookie(yoga, `delete-campaign+${Date.now()}@example.com`);
+
+    const create = await yoga.fetch(GRAPHQL_URL, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        origin: GRAPHQL_ORIGIN,
+        cookie,
+      },
+      body: JSON.stringify({
+        query: /* GraphQL */ `
+          mutation CreateCampaign($name: String!, $startingMoney: Int) {
+            createCampaign(name: $name, startingMoney: $startingMoney) {
+              id
+              name
+            }
+          }
+        `,
+        variables: { name: 'To Delete', startingMoney: 0 },
+      }),
+    });
+
+    expect(create.status).toBe(200);
+    const createBody = await create.json();
+    expect(createBody.errors).toBeUndefined();
+    const campaignId = createBody.data.createCampaign.id as string;
+
+    const del = await yoga.fetch(GRAPHQL_URL, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        origin: GRAPHQL_ORIGIN,
+        cookie,
+      },
+      body: JSON.stringify({
+        query: /* GraphQL */ `
+          mutation DeleteCampaign($campaignId: ID!) {
+            deleteCampaign(campaignId: $campaignId)
+          }
+        `,
+        variables: { campaignId },
+      }),
+    });
+
+    expect(del.status).toBe(200);
+    const delBody = await del.json();
+    expect(delBody.errors).toBeUndefined();
+    expect(delBody.data.deleteCampaign).toBe(true);
+
+    const list = await yoga.fetch(GRAPHQL_URL, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        origin: GRAPHQL_ORIGIN,
+        cookie,
+      },
+      body: JSON.stringify({
+        query: /* GraphQL */ `
+          query Campaigns {
+            campaigns {
+              id
+              name
+            }
+          }
+        `,
+      }),
+    });
+
+    expect(list.status).toBe(200);
+    const listBody = await list.json();
+    expect(listBody.errors).toBeUndefined();
+    const found = (listBody.data.campaigns as Array<{ id: string; name: string }>).find((c) => c.id === campaignId);
+    expect(found).toBeUndefined();
+  });
+
+  it('rejects campaign deletes by non-owners', async () => {
+    const yoga = createYogaServer();
+
+    const ownerCookie = await registerAndGetCookie(yoga, `delete-owner+${Date.now()}@example.com`);
+    const otherCookie = await registerAndGetCookie(yoga, `delete-other+${Date.now()}@example.com`);
+
+    const create = await yoga.fetch(GRAPHQL_URL, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        origin: GRAPHQL_ORIGIN,
+        cookie: ownerCookie,
+      },
+      body: JSON.stringify({
+        query: /* GraphQL */ `
+          mutation CreateCampaign($name: String!) {
+            createCampaign(name: $name) {
+              id
+            }
+          }
+        `,
+        variables: { name: 'Owned' },
+      }),
+    });
+
+    expect(create.status).toBe(200);
+    const createBody = await create.json();
+    expect(createBody.errors).toBeUndefined();
+    const campaignId = createBody.data.createCampaign.id as string;
+
+    const del = await yoga.fetch(GRAPHQL_URL, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        origin: GRAPHQL_ORIGIN,
+        cookie: otherCookie,
+      },
+      body: JSON.stringify({
+        query: /* GraphQL */ `
+          mutation DeleteCampaign($campaignId: ID!) {
+            deleteCampaign(campaignId: $campaignId)
+          }
+        `,
+        variables: { campaignId },
+      }),
+    });
+
+    expect(del.status).toBe(200);
+    const delBody = await del.json();
+    expect(delBody.data).toBeNull();
+    expect(delBody.errors?.[0]?.message ?? '').toMatch(/not authorized/i);
+  });
+
   it('rejects unauthenticated access to campaigns and characters', async () => {
     const yoga = createYogaServer();
 

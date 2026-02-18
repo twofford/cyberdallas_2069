@@ -287,3 +287,15 @@
 
 - Prompt (2026-02-15 04:54 UTC): Add the ability to edit characters from the character detail page.
 - Response: Added an owner-only `updateCharacter` GraphQL mutation (edit name + stats) with unit tests; implemented persistence for both in-memory and Prisma datasources; exposed a computed `canEdit` field so the UI only shows edit controls for editable characters; added an Edit/Save flow on the character page and a Playwright E2E test verifying edits persist after reload; re-ran unit and E2E suites to green.
+
+- Prompt (2026-02-16): “Let’s DRY up the React components. Give me a plan for that.” / “Implement the plan at plans/dryUpReactComponents.prompt.md.”
+- Response: Added shared frontend utilities and small UI primitives to remove repeated patterns (a shared GraphQL fetch helper, shared auth queries + `useMe()` hook, a generic list→entity hook, and `PageShell`/`InlineError`). Refactored the auth/session components and catalog/detail pages to use them, keeping UX the same. Fixed a Vitest JSX runtime issue (“React is not defined”) in shared UI components and kept `npm test` green.
+
+- Prompt (2026-02-16): “A player should be able to change the campaign their character is in. Add that functionality.”
+- Response: Extended `updateCharacter` to accept `campaignId` (including clearing to no-campaign), enforced that a user must be a member of the target campaign, and prevented public archetypes from being assigned to campaigns. Implemented persistence in both in-memory and Prisma datasources, added a Campaign selector to the character edit UI, and added unit test coverage verifying the campaign change persists; `npm test` is green.
+
+- Prompt (2026-02-16): “Okay, let's add the ability to delete a character from the edit page. Only a character's owner should be able to delete it.”
+- Response: Added an owner-only `deleteCharacter(id: ID!): Boolean!` GraphQL mutation backed by a new `DataSource.deleteCharacter({ id, ownerId })` method for both in-memory and Prisma datasources. Wired a Delete button into the character edit controls that confirms before deleting and redirects back to `/home` on success. Added unit tests for owner-delete success and non-owner rejection; `npm test` remains green.
+
+- Prompt (2026-02-16): “Let's add a money fields to the characters model.”
+- Response: Added `money` (Int, default 0) to the Character model end-to-end: Prisma schema + migration, seed data + Prisma seed, datasource mapping/selects, GraphQL `Character.money`, and the character edit UI (view + edit + updateCharacter support). Added unit coverage verifying money updates persist; `npm test` remains green.

@@ -3,8 +3,15 @@
 import * as React from 'react';
 import { useRouter } from 'next/navigation';
 
+import { graphqlFetch as graphQLFetch } from '../../lib/graphqlFetch';
 import { Notices, TooltipNotice, useNotices } from '../../ui/notices';
 import { Select } from '../../ui/Select';
+
+import {
+  PREDEFINED_SKILLS,
+  canonicalizeIfPredefined as canonicalizeIfPredefinedSkill,
+  isPredefinedSkill,
+} from '../lib/skills';
 
 type Campaign = { id: string; name: string };
 
@@ -21,48 +28,8 @@ type FormQuery = {
 
 type CreateCharacterMutation = { createCharacter: { id: string } };
 
-const PREDEFINED_SKILLS = [
-  'Athleticism',
-  'Awareness',
-  'Connections',
-  'Deception',
-  'Driving',
-  'Engineering',
-  'Explosives',
-  'Hacking',
-  'Influence',
-  'Intimidation',
-  'Investigation',
-  'Marksmanship',
-  'Martial Arts',
-  'Medicine',
-  'Melee Combat',
-  'Piloting',
-  'Seduction',
-  'Stealth',
-  'Street Smarts',
-  'Tracking',
-] as const;
-
-async function graphQLFetch<T>(input: { query: string; variables?: Record<string, unknown> }): Promise<T> {
-  const response = await fetch('/api/graphql', {
-    method: 'POST',
-    credentials: 'include',
-    headers: {
-      'content-type': 'application/json',
-    },
-    body: JSON.stringify({ query: input.query, variables: input.variables }),
-  });
-
-  const body = (await response.json()) as { data?: T; errors?: Array<{ message: string }> };
-  if (!response.ok || body.errors?.length || !body.data) {
-    const message = body.errors?.map((e) => e.message).join('\n') ?? 'Request failed';
-    throw new Error(message);
-  }
-  return body.data;
-}
-
-export function NewCharacterPageClient() {
+export function NewCharacterPageClient(props: { mode?: 'character' | 'npc' } = {}) {
+  const mode = props.mode ?? 'character';
   const router = useRouter();
   const [campaigns, setCampaigns] = React.useState<Campaign[]>([]);
   const [canCreatePublicArchetype, setCanCreatePublicArchetype] = React.useState(false);
@@ -73,7 +40,7 @@ export function NewCharacterPageClient() {
 
   const [campaignId, setCampaignId] = React.useState<string>('');
   const [name, setName] = React.useState('');
-  const [isPublicArchetype, setIsPublicArchetype] = React.useState(false);
+  const [isPublicArchetype, setIsPublicArchetype] = React.useState(mode === 'npc');
 
   const [stats, setStats] = React.useState({
     brawn: 0,
@@ -102,6 +69,15 @@ export function NewCharacterPageClient() {
   const [busy, setBusy] = React.useState(false);
   const [loadingCampaigns, setLoadingCampaigns] = React.useState(true);
   const notices = useNotices();
+
+  const effectiveIsPublicArchetype = mode === 'npc' ? true : isPublicArchetype;
+
+  React.useEffect(() => {
+    if (mode === 'npc') {
+      setIsPublicArchetype(true);
+      setCampaignId('');
+    }
+  }, [mode]);
 
   function randomId(): string {
     if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) return crypto.randomUUID();
@@ -146,12 +122,17 @@ export function NewCharacterPageClient() {
         });
 
         if (cancelled) return;
+        const canCreate = (data.ownerCampaigns?.length ?? 0) > 0;
         setCampaigns(data.campaigns);
-        setCanCreatePublicArchetype((data.ownerCampaigns?.length ?? 0) > 0);
+        setCanCreatePublicArchetype(canCreate);
         setCybernetics(data.cybernetics);
         setWeapons(data.weapons);
         setItems(data.items);
         setVehicles(data.vehicles);
+
+        if (mode === 'npc' && !canCreate) {
+          router.replace('/home');
+        }
       } catch (e) {
         if (cancelled) return;
         notices.setFromError(e);
@@ -172,9 +153,7 @@ export function NewCharacterPageClient() {
   }
 
   const canonicalizeIfPredefined = React.useCallback((name: string): string => {
-    const trimmed = name.trim().replace(/\s+/g, ' ');
-    const match = PREDEFINED_SKILLS.find((s) => s.toLowerCase() === trimmed.toLowerCase());
-    return match ?? trimmed;
+    return canonicalizeIfPredefinedSkill(name);
   }, []);
 
   const allSkillNames = React.useMemo(() => {
@@ -189,11 +168,6 @@ export function NewCharacterPageClient() {
     }
     return out;
   }, [canonicalizeIfPredefined, savedCustomSkillNames]);
-
-  function isPredefinedSkill(name: string): boolean {
-    const lower = name.toLowerCase();
-    return PREDEFINED_SKILLS.some((s) => s.toLowerCase() === lower);
-  }
 
   function findDuplicateSkillNames(skillNames: string[]): string[] {
     const counts = new Map<string, { name: string; count: number }>();
@@ -289,9 +263,9 @@ export function NewCharacterPageClient() {
           }
         `,
         variables: {
-          campaignId: isPublicArchetype ? null : campaignId.trim() ? campaignId : null,
+          campaignId: effectiveIsPublicArchetype ? null : campaignId.trim() ? campaignId : null,
           name: trimmed,
-          isPublic: isPublicArchetype ? true : null,
+          isPublic: effectiveIsPublicArchetype ? true : null,
           stats,
           skills: skillsOut,
           cyberneticIds: [...cyberneticIds],
@@ -316,6 +290,10 @@ export function NewCharacterPageClient() {
 
   if (loadingCampaigns) return <p>Loading campaigns…</p>;
 
+  if (mode === 'npc' && !canCreatePublicArchetype) {
+    return <p>Redirecting…</p>;
+  }
+
   return (
     <form
       onSubmit={(e) => {
@@ -330,30 +308,34 @@ export function NewCharacterPageClient() {
         <input value={name} onChange={(e) => setName(e.target.value)} disabled={busy} />
       </label>
 
-      <Select
-        label="Campaign"
-        ariaLabel="Campaign"
-        value={campaignId}
-        disabled={busy || isPublicArchetype}
-        options={[{ value: '', label: '(No campaign)' }, ...campaigns.map((c) => ({ value: c.id, label: c.name }))]}
-        onChange={setCampaignId}
-      />
-
-      {canCreatePublicArchetype ? (
-        <label>
-          <input
-            type="checkbox"
-            checked={isPublicArchetype}
-            onChange={(e) => {
-              const next = e.target.checked;
-              setIsPublicArchetype(next);
-              if (next) setCampaignId('');
-            }}
-            disabled={busy}
+      {mode === 'npc' ? null : (
+        <>
+          <Select
+            label="Campaign"
+            ariaLabel="Campaign"
+            value={campaignId}
+            disabled={busy || effectiveIsPublicArchetype}
+            options={[{ value: '', label: '(No campaign)' }, ...campaigns.map((c) => ({ value: c.id, label: c.name }))]}
+            onChange={setCampaignId}
           />
-          Public archetype (visible to all players)
-        </label>
-      ) : null}
+
+          {canCreatePublicArchetype ? (
+            <label>
+              <input
+                type="checkbox"
+                checked={isPublicArchetype}
+                onChange={(e) => {
+                  const next = e.target.checked;
+                  setIsPublicArchetype(next);
+                  if (next) setCampaignId('');
+                }}
+                disabled={busy}
+              />
+              Public archetype (visible to all players)
+            </label>
+          ) : null}
+        </>
+      )}
 
       <h3 style={{ marginTop: 18 }}>Stats</h3>
       <div

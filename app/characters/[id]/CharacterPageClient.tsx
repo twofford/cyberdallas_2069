@@ -1,42 +1,25 @@
 'use client';
 
 import * as React from 'react';
+import { useRouter } from 'next/navigation';
+
+import { graphqlFetch as sharedGraphQLFetch } from '../../lib/graphqlFetch';
+import { Select } from '../../ui/Select';
+
+import { PREDEFINED_SKILLS, isPredefinedSkill } from '../lib/skills';
 
 type NamedThing = { id: string; name: string; shortDescription: string };
 
-const PREDEFINED_SKILLS = [
-  'Athleticism',
-  'Awareness',
-  'Connections',
-  'Deception',
-  'Driving',
-  'Engineering',
-  'Explosives',
-  'Hacking',
-  'Influence',
-  'Intimidation',
-  'Investigation',
-  'Marksmanship',
-  'Martial Arts',
-  'Medicine',
-  'Melee Combat',
-  'Piloting',
-  'Seduction',
-  'Stealth',
-  'Street Smarts',
-  'Tracking',
-] as const;
+type Campaign = { id: string; name: string };
 
-function isPredefinedSkill(name: string): boolean {
-  const lower = name.trim().toLowerCase();
-  return PREDEFINED_SKILLS.some((s) => s.toLowerCase() === lower);
-}
+const graphQLFetch = sharedGraphQLFetch;
 
 type Character = {
   id: string;
   name: string;
   isPublic: boolean;
   canEdit: boolean;
+  money: number;
   speed: number;
   hitPoints: number;
   campaign: { id: string; name: string } | null;
@@ -91,35 +74,23 @@ type Character = {
   }>;
 };
 
-async function graphQLFetch<T>(input: { query: string; variables?: Record<string, unknown> }): Promise<T> {
-  const response = await fetch('/api/graphql', {
-    method: 'POST',
-    credentials: 'include',
-    headers: {
-      'content-type': 'application/json',
-    },
-    body: JSON.stringify({ query: input.query, variables: input.variables }),
-  });
-
-  const body = (await response.json()) as { data?: T; errors?: Array<{ message: string }> };
-  if (!response.ok || body.errors?.length || !body.data) {
-    const message = body.errors?.map((e) => e.message).join('\n') ?? 'Request failed';
-    throw new Error(message);
-  }
-  return body.data;
-}
-
 export function CharacterPageClient(props: { characterId: string }) {
+  const router = useRouter();
   const [character, setCharacter] = React.useState<Character | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   const [busy, setBusy] = React.useState(false);
   const [editing, setEditing] = React.useState(false);
 
+  const [campaigns, setCampaigns] = React.useState<Campaign[]>([]);
+
   const [allCybernetics, setAllCybernetics] = React.useState<NamedThing[]>([]);
   const [allWeapons, setAllWeapons] = React.useState<NamedThing[]>([]);
   const [allItems, setAllItems] = React.useState<NamedThing[]>([]);
+  const [allVehicles, setAllVehicles] = React.useState<NamedThing[]>([]);
 
   const [draftName, setDraftName] = React.useState('');
+  const [draftCampaignId, setDraftCampaignId] = React.useState('');
+  const [draftMoney, setDraftMoney] = React.useState<number>(0);
   const [draftStats, setDraftStats] = React.useState<Character['stats']>({
     brawn: 0,
     charm: 0,
@@ -137,6 +108,7 @@ export function CharacterPageClient(props: { characterId: string }) {
   const [cyberneticIds, setCyberneticIds] = React.useState<Set<string>>(() => new Set());
   const [weaponIds, setWeaponIds] = React.useState<Set<string>>(() => new Set());
   const [itemIds, setItemIds] = React.useState<Set<string>>(() => new Set());
+  const [vehicleIds, setVehicleIds] = React.useState<Set<string>>(() => new Set());
 
   const randomId = React.useCallback((): string => {
     if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) return crypto.randomUUID();
@@ -155,9 +127,22 @@ export function CharacterPageClient(props: { characterId: string }) {
     [],
   );
 
+  const removeId = React.useCallback(
+    (setter: React.Dispatch<React.SetStateAction<Set<string>>>, id: string) => {
+      setter((prev) => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
+    },
+    [],
+  );
+
   const resetDraftsFromCharacter = React.useCallback(
     (next: Character) => {
       setDraftName(next.name);
+      setDraftCampaignId(next.campaign?.id ?? '');
+      setDraftMoney(next.money);
       setDraftStats(next.stats);
 
       const levels: Record<string, number> = Object.fromEntries(PREDEFINED_SKILLS.map((name) => [name, 0]));
@@ -176,9 +161,27 @@ export function CharacterPageClient(props: { characterId: string }) {
       setCyberneticIds(new Set((next.cybernetics ?? []).map((c) => c.id)));
       setWeaponIds(new Set((next.weapons ?? []).map((w) => w.id)));
       setItemIds(new Set((next.items ?? []).map((i) => i.id)));
+      setVehicleIds(new Set((next.vehicles ?? []).map((v) => v.id)));
     },
     [randomId],
   );
+
+  const selectedCybernetics = React.useMemo(
+    () => allCybernetics.filter((c) => cyberneticIds.has(c.id)),
+    [allCybernetics, cyberneticIds],
+  );
+  const selectedWeapons = React.useMemo(() => allWeapons.filter((w) => weaponIds.has(w.id)), [allWeapons, weaponIds]);
+  const selectedItems = React.useMemo(() => allItems.filter((i) => itemIds.has(i.id)), [allItems, itemIds]);
+  const selectedVehicles = React.useMemo(
+    () => allVehicles.filter((v) => vehicleIds.has(v.id)),
+    [allVehicles, vehicleIds],
+  );
+
+  const campaignOptions = React.useMemo(() => {
+    const byId = new Map(campaigns.map((c) => [c.id, c] as const));
+    if (character?.campaign && !byId.has(character.campaign.id)) byId.set(character.campaign.id, character.campaign);
+    return [...byId.values()];
+  }, [campaigns, character?.campaign]);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -188,18 +191,25 @@ export function CharacterPageClient(props: { characterId: string }) {
     (async () => {
       try {
         const data = await graphQLFetch<{
+          campaigns: Campaign[];
           characters: Character[];
           allCybernetics: NamedThing[];
           allWeapons: NamedThing[];
           allItems: NamedThing[];
+          allVehicles: NamedThing[];
         }>({
           query: /* GraphQL */ `
             query CharacterDetail {
+              campaigns {
+                id
+                name
+              }
               characters {
                 id
                 name
                 isPublic
                 canEdit
+                money
                 speed
                 hitPoints
                 campaign {
@@ -281,14 +291,22 @@ export function CharacterPageClient(props: { characterId: string }) {
                 name
                 shortDescription
               }
+
+              allVehicles: vehicles {
+                id
+                name
+                shortDescription
+              }
             }
           `,
         });
 
         if (cancelled) return;
+        setCampaigns(data.campaigns);
         setAllCybernetics(data.allCybernetics);
         setAllWeapons(data.allWeapons);
         setAllItems(data.allItems);
+        setAllVehicles(data.allVehicles);
         const found = data.characters.find((c) => c.id === props.characterId) ?? null;
         setCharacter(found);
         if (found) resetDraftsFromCharacter(found);
@@ -315,6 +333,11 @@ export function CharacterPageClient(props: { characterId: string }) {
     const nextName = draftName.trim();
     if (!nextName) {
       setError('Invalid character name');
+      return;
+    }
+
+    if (!Number.isFinite(draftMoney) || !Number.isInteger(draftMoney) || draftMoney < 0) {
+      setError('Invalid money');
       return;
     }
 
@@ -361,26 +384,33 @@ export function CharacterPageClient(props: { characterId: string }) {
         query: /* GraphQL */ `
           mutation UpdateCharacter(
             $id: ID!
+            $campaignId: ID
             $name: String!
+            $money: Int
             $stats: StatsInput
             $skills: [SkillInput!]
             $cyberneticIds: [ID!]
             $weaponIds: [ID!]
             $itemIds: [ID!]
+            $vehicleIds: [ID!]
           ) {
             updateCharacter(
               id: $id
+              campaignId: $campaignId
               name: $name
+              money: $money
               stats: $stats
               skills: $skills
               cyberneticIds: $cyberneticIds
               weaponIds: $weaponIds
               itemIds: $itemIds
+              vehicleIds: $vehicleIds
             ) {
               id
               name
               isPublic
               canEdit
+              money
               speed
               hitPoints
               campaign {
@@ -450,17 +480,48 @@ export function CharacterPageClient(props: { characterId: string }) {
         `,
         variables: {
           id: character.id,
+          campaignId: character.isPublic ? null : draftCampaignId.trim() ? draftCampaignId : null,
           name: nextName,
+          money: draftMoney,
           stats,
           skills: skillsOut,
           cyberneticIds: [...cyberneticIds],
           weaponIds: [...weaponIds],
           itemIds: [...itemIds],
+          vehicleIds: [...vehicleIds],
         },
       });
 
       setCharacter(data.updateCharacter);
       setEditing(false);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Request failed');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function deleteCharacter() {
+    if (!character) return;
+    if (!character.canEdit) return;
+    if (busy) return;
+
+    const ok = window.confirm('Delete this character? This cannot be undone.');
+    if (!ok) return;
+
+    setBusy(true);
+    setError(null);
+    try {
+      await graphQLFetch<{ deleteCharacter: boolean }>({
+        query: /* GraphQL */ `
+          mutation DeleteCharacter($id: ID!) {
+            deleteCharacter(id: $id)
+          }
+        `,
+        variables: { id: character.id },
+      });
+
+      router.push('/home');
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Request failed');
     } finally {
@@ -491,6 +552,10 @@ export function CharacterPageClient(props: { characterId: string }) {
               <button type="button" onClick={saveEdits} disabled={busy}>
                 Save
               </button>
+              {' '}
+              <button type="button" onClick={deleteCharacter} disabled={busy}>
+                Delete
+              </button>
             </>
           ) : (
             <button
@@ -516,6 +581,37 @@ export function CharacterPageClient(props: { characterId: string }) {
               Name
               <input value={draftName} onChange={(e) => setDraftName(e.target.value)} />
             </label>
+          </section>
+
+          <section>
+            <h2>Money</h2>
+            <label>
+              Money
+              <input
+                type="number"
+                min={0}
+                step={1}
+                value={draftMoney}
+                onChange={(e) => setDraftMoney(Number(e.target.value))}
+                disabled={busy}
+              />
+            </label>
+          </section>
+
+          <section>
+            <h2>Campaign</h2>
+            <Select
+              label="Campaign"
+              ariaLabel="Campaign"
+              value={draftCampaignId}
+              disabled={busy || character.isPublic}
+              options={[
+                { value: '', label: '(No campaign)' },
+                ...campaignOptions.map((c) => ({ value: c.id, label: c.name })),
+              ]}
+              onChange={setDraftCampaignId}
+            />
+            {character.isPublic ? <p>Public archetypes can’t belong to a campaign.</p> : null}
           </section>
 
           <section>
@@ -689,21 +785,17 @@ export function CharacterPageClient(props: { characterId: string }) {
 
           <section>
             <h2>Cybernetics</h2>
-            {allCybernetics.length ? (
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 8 }}>
-                {allCybernetics.map((c) => (
-                  <label key={c.id} style={{ display: 'flex', gap: 8, alignItems: 'baseline' }}>
-                    <input
-                      type="checkbox"
-                      checked={cyberneticIds.has(c.id)}
-                      onChange={(e) => toggleId(setCyberneticIds, c.id, e.target.checked)}
-                      aria-label={c.name}
-                      disabled={busy}
-                    />
+            {selectedCybernetics.length ? (
+              <div style={{ display: 'grid', gap: 8 }}>
+                {selectedCybernetics.map((c) => (
+                  <div key={c.id} style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 8, alignItems: 'baseline' }}>
                     <span>
                       <strong>{c.name}</strong> — {c.shortDescription}
                     </span>
-                  </label>
+                    <button type="button" onClick={() => removeId(setCyberneticIds, c.id)} disabled={busy}>
+                      Remove
+                    </button>
+                  </div>
                 ))}
               </div>
             ) : (
@@ -713,21 +805,17 @@ export function CharacterPageClient(props: { characterId: string }) {
 
           <section>
             <h2>Weapons</h2>
-            {allWeapons.length ? (
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 8 }}>
-                {allWeapons.map((w) => (
-                  <label key={w.id} style={{ display: 'flex', gap: 8, alignItems: 'baseline' }}>
-                    <input
-                      type="checkbox"
-                      checked={weaponIds.has(w.id)}
-                      onChange={(e) => toggleId(setWeaponIds, w.id, e.target.checked)}
-                      aria-label={w.name}
-                      disabled={busy}
-                    />
+            {selectedWeapons.length ? (
+              <div style={{ display: 'grid', gap: 8 }}>
+                {selectedWeapons.map((w) => (
+                  <div key={w.id} style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 8, alignItems: 'baseline' }}>
                     <span>
                       <strong>{w.name}</strong> — {w.shortDescription}
                     </span>
-                  </label>
+                    <button type="button" onClick={() => removeId(setWeaponIds, w.id)} disabled={busy}>
+                      Remove
+                    </button>
+                  </div>
                 ))}
               </div>
             ) : (
@@ -737,21 +825,37 @@ export function CharacterPageClient(props: { characterId: string }) {
 
           <section>
             <h2>Items</h2>
-            {allItems.length ? (
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 8 }}>
-                {allItems.map((i) => (
-                  <label key={i.id} style={{ display: 'flex', gap: 8, alignItems: 'baseline' }}>
-                    <input
-                      type="checkbox"
-                      checked={itemIds.has(i.id)}
-                      onChange={(e) => toggleId(setItemIds, i.id, e.target.checked)}
-                      aria-label={i.name}
-                      disabled={busy}
-                    />
+            {selectedItems.length ? (
+              <div style={{ display: 'grid', gap: 8 }}>
+                {selectedItems.map((i) => (
+                  <div key={i.id} style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 8, alignItems: 'baseline' }}>
                     <span>
                       <strong>{i.name}</strong> — {i.shortDescription}
                     </span>
-                  </label>
+                    <button type="button" onClick={() => removeId(setItemIds, i.id)} disabled={busy}>
+                      Remove
+                    </button>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p>None.</p>
+            )}
+          </section>
+
+          <section>
+            <h2>Vehicles</h2>
+            {selectedVehicles.length ? (
+              <div style={{ display: 'grid', gap: 8 }}>
+                {selectedVehicles.map((v) => (
+                  <div key={v.id} style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 8, alignItems: 'baseline' }}>
+                    <span>
+                      <strong>{v.name}</strong> — {v.shortDescription}
+                    </span>
+                    <button type="button" onClick={() => removeId(setVehicleIds, v.id)} disabled={busy}>
+                      Remove
+                    </button>
+                  </div>
                 ))}
               </div>
             ) : (
@@ -765,6 +869,7 @@ export function CharacterPageClient(props: { characterId: string }) {
         <section>
           <h2>Stats</h2>
           <ul style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 8 }}>
+            <li>Money: {character.money}</li>
             <li>Speed: {character.speed}</li>
             <li>Hit Points: {character.hitPoints}</li>
             <li>Brawn: {character.stats.brawn}</li>
@@ -875,26 +980,28 @@ export function CharacterPageClient(props: { characterId: string }) {
         </section>
       ) : null}
 
-      <section>
-        <h2>Vehicles</h2>
-        {character.vehicles.length ? (
-          <ul>
-            {character.vehicles.map((vehicle) => (
-              <li key={vehicle.id}>
-                <strong>{vehicle.name}</strong> — {vehicle.shortDescription}
-                <ul>
-                  <li>Price: {vehicle.price}</li>
-                  <li>Speed: {vehicle.speed}</li>
-                  <li>Armor: {vehicle.armor}</li>
-                  <li>{vehicle.longDescription}</li>
-                </ul>
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p>None.</p>
-        )}
-      </section>
+      {!editing ? (
+        <section>
+          <h2>Vehicles</h2>
+          {character.vehicles.length ? (
+            <ul>
+              {character.vehicles.map((vehicle) => (
+                <li key={vehicle.id}>
+                  <strong>{vehicle.name}</strong> — {vehicle.shortDescription}
+                  <ul>
+                    <li>Price: {vehicle.price}</li>
+                    <li>Speed: {vehicle.speed}</li>
+                    <li>Armor: {vehicle.armor}</li>
+                    <li>{vehicle.longDescription}</li>
+                  </ul>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p>None.</p>
+          )}
+        </section>
+      ) : null}
     </>
   );
 }

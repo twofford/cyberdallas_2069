@@ -1,6 +1,7 @@
 'use client';
 
-import * as React from 'react';
+import { useEntityFromListQuery } from '../../lib/useEntityFromListQuery';
+import { InlineError } from '../../ui/InlineError';
 
 type Item = {
   id: string;
@@ -12,70 +13,27 @@ type Item = {
   longDescription: string;
 };
 
-async function graphQLFetch<T>(input: { query: string; variables?: Record<string, unknown> }): Promise<T> {
-  const response = await fetch('/api/graphql', {
-    method: 'POST',
-    credentials: 'include',
-    headers: {
-      'content-type': 'application/json',
-    },
-    body: JSON.stringify({ query: input.query, variables: input.variables }),
+export function ItemPageClient(props: { itemId: string }) {
+  const { entity: item, busy, error } = useEntityFromListQuery<Item, { items: Item[] }>({
+    id: props.itemId,
+    query: /* GraphQL */ `
+      query ItemDetail {
+        items {
+          id
+          name
+          price
+          weight
+          type
+          shortDescription
+          longDescription
+        }
+      }
+    `,
+    select: (data) => data.items,
   });
 
-  const body = (await response.json()) as { data?: T; errors?: Array<{ message: string }> };
-  if (!response.ok || body.errors?.length || !body.data) {
-    const message = body.errors?.map((e) => e.message).join('\n') ?? 'Request failed';
-    throw new Error(message);
-  }
-  return body.data;
-}
-
-export function ItemPageClient(props: { itemId: string }) {
-  const [item, setItem] = React.useState<Item | null>(null);
-  const [error, setError] = React.useState<string | null>(null);
-  const [busy, setBusy] = React.useState(false);
-
-  React.useEffect(() => {
-    let cancelled = false;
-    setBusy(true);
-    setError(null);
-
-    (async () => {
-      try {
-        const data = await graphQLFetch<{ items: Item[] }>({
-          query: /* GraphQL */ `
-            query ItemDetail {
-              items {
-                id
-                name
-                price
-                weight
-                type
-                shortDescription
-                longDescription
-              }
-            }
-          `,
-        });
-
-        if (cancelled) return;
-        setItem(data.items.find((i) => i.id === props.itemId) ?? null);
-      } catch (e) {
-        if (cancelled) return;
-        setError(e instanceof Error ? e.message : 'Request failed');
-        setItem(null);
-      } finally {
-        if (!cancelled) setBusy(false);
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [props.itemId]);
-
   if (busy) return <p>Loading item…</p>;
-  if (error) return <p style={{ color: 'crimson' }}>{error}</p>;
+  if (error) return <InlineError>{error}</InlineError>;
   if (!item) return <p>Item not found.</p>;
 
   return (

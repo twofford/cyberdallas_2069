@@ -15,8 +15,8 @@ async function main() {
   for (const campaign of campaigns) {
     await prisma.campaign.upsert({
       where: { id: campaign.id },
-      update: { name: campaign.name },
-      create: { id: campaign.id, name: campaign.name },
+      update: { name: campaign.name, startingMoney: campaign.startingMoney ?? 0 },
+      create: { id: campaign.id, name: campaign.name, startingMoney: campaign.startingMoney ?? 0 },
     });
   }
 
@@ -124,6 +124,7 @@ async function main() {
       update: {
         name: character.name,
         isPublic: character.isPublic ?? false,
+        money: character.money ?? 0,
         speed: character.speed ?? 30,
         hitPoints: character.hitPoints ?? 5,
         brawn: stats.brawn ?? 0,
@@ -139,6 +140,7 @@ async function main() {
         id: character.id,
         name: character.name,
         isPublic: character.isPublic ?? false,
+        money: character.money ?? 0,
         speed: character.speed ?? 30,
         hitPoints: character.hitPoints ?? 5,
         brawn: stats.brawn ?? 0,

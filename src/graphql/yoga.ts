@@ -16,7 +16,7 @@ import type {
 
 type YogaContext = {
   dataSource: DataSource;
-  user: { id: string; email: string } | null;
+  user: { id: string; email: string; role: 'USER' | 'ADMIN' } | null;
   httpHeaders: Record<string, string>;
 };
 
@@ -157,6 +157,24 @@ export function createYogaServer() {
     return ctx.user;
   }
 
+  function isAdmin(user: YogaContext['user']): boolean {
+    return user?.role === 'ADMIN';
+  }
+
+  function adminEmailSet(): Set<string> {
+    const raw = process.env.CYBERDALLAS_ADMIN_EMAILS ?? '';
+    return new Set(
+      raw
+        .split(',')
+        .map((s) => s.trim().toLowerCase())
+        .filter(Boolean),
+    );
+  }
+
+  function isAdminEmail(email: string): boolean {
+    return adminEmailSet().has(email.trim().toLowerCase());
+  }
+
   async function getUserFromRequest(request: Request): Promise<YogaContext['user']> {
     const secret = process.env.AUTH_SECRET;
     if (!secret) return null;
@@ -281,6 +299,7 @@ export function createYogaServer() {
         name: String!
         isPublic: Boolean!
         canEdit: Boolean!
+        money: Int!
         speed: Int!
         hitPoints: Int!
         campaign: Campaign
@@ -295,6 +314,7 @@ export function createYogaServer() {
       type Campaign {
         id: ID!
         name: String!
+        startingMoney: Int!
         characters: [Character!]!
       }
 
@@ -329,6 +349,9 @@ export function createYogaServer() {
         login(email: String!, password: String!): AuthPayload!
         logout: Boolean!
         joinCampaign(campaignId: ID!): Campaign!
+        createCampaign(name: String!, startingMoney: Int): Campaign!
+        updateCampaign(campaignId: ID!, name: String, startingMoney: Int): Campaign!
+        deleteCampaign(campaignId: ID!): Boolean!
         createCharacter(
           campaignId: ID
           name: String!
@@ -342,13 +365,17 @@ export function createYogaServer() {
         ): Character!
         updateCharacter(
           id: ID!
+          campaignId: ID
           name: String
+          money: Int
           stats: StatsInput
           skills: [SkillInput!]
           cyberneticIds: [ID!]
           weaponIds: [ID!]
           itemIds: [ID!]
+          vehicleIds: [ID!]
         ): Character!
+        deleteCharacter(id: ID!): Boolean!
         createCampaignInvite(campaignId: ID!, email: String!): CampaignInviteToken!
         acceptCampaignInvite(token: String!): Campaign!
       }
@@ -357,14 +384,17 @@ export function createYogaServer() {
       Query: {
         characters: async (_parent: unknown, _args: unknown, ctx: YogaContext) => {
           const user = requireUser(ctx);
+          if (isAdmin(user)) return ctx.dataSource.listCharacters();
           return ctx.dataSource.listCharactersForUser(user.id);
         },
         campaigns: async (_parent: unknown, _args: unknown, ctx: YogaContext) => {
           const user = requireUser(ctx);
+          if (isAdmin(user)) return ctx.dataSource.listCampaigns();
           return ctx.dataSource.listCampaignsForUser(user.id);
         },
         ownerCampaigns: async (_parent: unknown, _args: unknown, ctx: YogaContext) => {
           const user = requireUser(ctx);
+          if (isAdmin(user)) return ctx.dataSource.listCampaigns();
           const campaigns = await ctx.dataSource.listCampaignsForUser(user.id);
           const owned: Array<CampaignRecord> = [];
           for (const campaign of campaigns) {
@@ -391,9 +421,9 @@ export function createYogaServer() {
           if (existing) throw new GraphQLError('User already exists');
 
           const passwordHash = await hashPassword(password);
-          let user: { id: string; email: string };
+          let user: { id: string; email: string; role: 'USER' | 'ADMIN' };
           try {
-            user = await ctx.dataSource.createUser({ email, passwordHash });
+            user = await ctx.dataSource.createUser({ email, passwordHash, ...(isAdminEmail(email) ? { role: 'ADMIN' } : {}) });
           } catch (error) {
             if (error instanceof Error && error.message === 'DUPLICATE_EMAIL') {
               throw new GraphQLError('User already exists');
@@ -406,7 +436,7 @@ export function createYogaServer() {
 
           const token = issueAuthToken(user.id, secret);
           ctx.httpHeaders['set-cookie'] = buildSessionCookie(token);
-          return { user };
+          return { user: { id: user.id, email: user.email } };
         },
         login: async (_parent: unknown, args: { email: string; password: string }, ctx: YogaContext) => {
           const email = args.email.trim().toLowerCase();
@@ -442,6 +472,89 @@ export function createYogaServer() {
           return campaign;
         },
 
+        createCampaign: async (_parent: unknown, args: { name: string; startingMoney?: number | null }, ctx: YogaContext) => {
+          const user = requireUser(ctx);
+          const name = String(args.name ?? '').trim();
+          if (!name) throw new GraphQLError('Invalid campaign name');
+          if (name.length > 128) throw new GraphQLError('Invalid campaign name');
+
+          const startingMoneyRaw = args.startingMoney;
+          const startingMoney =
+            startingMoneyRaw === null || startingMoneyRaw === undefined ? undefined : Number(startingMoneyRaw);
+          if (startingMoney !== undefined) {
+            if (!Number.isFinite(startingMoney) || !Number.isInteger(startingMoney) || startingMoney < 0) {
+              throw new GraphQLError('Invalid starting money');
+            }
+          }
+
+          return ctx.dataSource.createCampaign({ ownerId: user.id, name, ...(startingMoney !== undefined ? { startingMoney } : {}) });
+        },
+
+        updateCampaign: async (
+          _parent: unknown,
+          args: { campaignId: string; name?: string | null; startingMoney?: number | null },
+          ctx: YogaContext,
+        ) => {
+          const user = requireUser(ctx);
+          const campaignId = String(args.campaignId ?? '').trim();
+          if (!campaignId) throw new GraphQLError('Campaign not found');
+
+          const nameRaw = args.name;
+          const name = nameRaw === null || nameRaw === undefined ? undefined : String(nameRaw).trim();
+          if (name !== undefined) {
+            if (!name) throw new GraphQLError('Invalid campaign name');
+            if (name.length > 128) throw new GraphQLError('Invalid campaign name');
+          }
+
+          const startingMoneyRaw = args.startingMoney;
+          const startingMoney =
+            startingMoneyRaw === null || startingMoneyRaw === undefined ? undefined : Number(startingMoneyRaw);
+          if (startingMoney !== undefined) {
+            if (!Number.isFinite(startingMoney) || !Number.isInteger(startingMoney) || startingMoney < 0) {
+              throw new GraphQLError('Invalid starting money');
+            }
+          }
+
+          if (!isAdmin(user)) {
+            const role = await ctx.dataSource.getCampaignMembershipRole({ userId: user.id, campaignId });
+            if (role !== 'OWNER') throw new GraphQLError('Not authorized');
+          }
+
+          try {
+            return await ctx.dataSource.updateCampaign({
+              id: campaignId,
+              ownerId: user.id,
+              actorRole: user.role,
+              ...(name !== undefined ? { name } : {}),
+              ...(startingMoney !== undefined ? { startingMoney } : {}),
+            });
+          } catch (error) {
+            if (error instanceof Error && error.message === 'CAMPAIGN_NOT_FOUND') throw new GraphQLError('Campaign not found');
+            if (error instanceof Error && error.message === 'NOT_AUTHORIZED') throw new GraphQLError('Not authorized');
+            throw error;
+          }
+        },
+
+        deleteCampaign: async (_parent: unknown, args: { campaignId: string }, ctx: YogaContext) => {
+          const user = requireUser(ctx);
+          const campaignId = String(args.campaignId ?? '').trim();
+          if (!campaignId) throw new GraphQLError('Campaign not found');
+
+          if (!isAdmin(user)) {
+            const role = await ctx.dataSource.getCampaignMembershipRole({ userId: user.id, campaignId });
+            if (role !== 'OWNER') throw new GraphQLError('Not authorized');
+          }
+
+          try {
+            await ctx.dataSource.deleteCampaign({ id: campaignId, ownerId: user.id, actorRole: user.role });
+            return true;
+          } catch (error) {
+            if (error instanceof Error && error.message === 'CAMPAIGN_NOT_FOUND') throw new GraphQLError('Campaign not found');
+            if (error instanceof Error && error.message === 'NOT_AUTHORIZED') throw new GraphQLError('Not authorized');
+            throw error;
+          }
+        },
+
         createCharacter: async (
           _parent: unknown,
           args: {
@@ -471,6 +584,9 @@ export function createYogaServer() {
           }
 
           if (isPublic) {
+            if (isAdmin(user)) {
+              // Admins may create public archetypes.
+            } else {
             const campaigns = await ctx.dataSource.listCampaignsForUser(user.id);
             let isOwnerSomewhere = false;
             for (const campaign of campaigns) {
@@ -481,14 +597,17 @@ export function createYogaServer() {
               }
             }
             if (!isOwnerSomewhere) throw new GraphQLError('Not authorized');
+            }
           }
 
           if (campaignIdOrNull) {
             const campaign = await ctx.dataSource.getCampaignById(campaignIdOrNull);
             if (!campaign) throw new GraphQLError('Campaign not found');
 
-            const role = await ctx.dataSource.getCampaignMembershipRole({ userId: user.id, campaignId: campaignIdOrNull });
-            if (!role) throw new GraphQLError('Not authorized');
+            if (!isAdmin(user)) {
+              const role = await ctx.dataSource.getCampaignMembershipRole({ userId: user.id, campaignId: campaignIdOrNull });
+              if (!role) throw new GraphQLError('Not authorized');
+            }
           }
 
           function parseOptionalStat(value: unknown): number | undefined {
@@ -583,7 +702,9 @@ export function createYogaServer() {
           _parent: unknown,
           args: {
             id: string;
+            campaignId?: string | null;
             name?: string | null;
+            money?: number | null;
             stats?: Partial<StatsRecord> | null;
             skills?: Array<{ name: string; level: number }> | null;
             cyberneticIds?: string[] | null;
@@ -596,9 +717,33 @@ export function createYogaServer() {
           const id = String(args.id ?? '').trim();
           if (!id) throw new GraphQLError('Character not found');
 
+          const campaignIdSpecified = args.campaignId !== undefined;
+          const campaignIdTrimmed =
+            args.campaignId === null || args.campaignId === undefined ? args.campaignId : String(args.campaignId).trim();
+          const campaignIdOrNull =
+            campaignIdTrimmed === undefined ? undefined : campaignIdTrimmed === null ? null : campaignIdTrimmed.length ? campaignIdTrimmed : null;
+
+          if (campaignIdSpecified && campaignIdOrNull) {
+            const campaign = await ctx.dataSource.getCampaignById(campaignIdOrNull);
+            if (!campaign) throw new GraphQLError('Campaign not found');
+
+            if (!isAdmin(user)) {
+              const role = await ctx.dataSource.getCampaignMembershipRole({ userId: user.id, campaignId: campaignIdOrNull });
+              if (!role) throw new GraphQLError('Not authorized');
+            }
+          }
+
           const nameRaw = args.name;
           const name = nameRaw === null || nameRaw === undefined ? undefined : String(nameRaw).trim();
           if (name !== undefined && !name) throw new GraphQLError('Invalid character name');
+
+          const moneyRaw = args.money;
+          const money = moneyRaw === null || moneyRaw === undefined ? undefined : moneyRaw;
+          if (money !== undefined) {
+            if (typeof money !== 'number' || !Number.isFinite(money) || !Number.isInteger(money) || money < 0) {
+              throw new GraphQLError('Invalid money');
+            }
+          }
 
           function parseOptionalStat(value: unknown): number | undefined {
             if (value === null || value === undefined) return undefined;
@@ -677,7 +822,9 @@ export function createYogaServer() {
           }
 
           const hasAnyChange =
+            campaignIdSpecified ||
             name !== undefined ||
+            money !== undefined ||
             hasAnyStat ||
             skillsIn !== undefined ||
             cyberneticIdsIn !== undefined ||
@@ -689,13 +836,32 @@ export function createYogaServer() {
             return await ctx.dataSource.updateCharacter({
               id,
               ownerId: user.id,
+              actorRole: user.role,
+              ...(campaignIdSpecified ? { campaignId: campaignIdOrNull ?? null } : {}),
               ...(name !== undefined ? { name } : {}),
+              ...(money !== undefined ? { money } : {}),
               ...(hasAnyStat ? { stats } : {}),
               ...(skillsIn !== undefined ? { skills } : {}),
               ...(cyberneticIdsIn !== undefined ? { cyberneticIds } : {}),
               ...(weaponIdsIn !== undefined ? { weaponIds } : {}),
               ...(itemIdsIn !== undefined ? { itemIds } : {}),
             });
+          } catch (error) {
+            if (error instanceof Error && error.message === 'CHARACTER_NOT_FOUND') throw new GraphQLError('Character not found');
+            if (error instanceof Error && error.message === 'NOT_AUTHORIZED') throw new GraphQLError('Not authorized');
+            if (error instanceof Error && error.message === 'CAMPAIGN_NOT_FOUND') throw new GraphQLError('Campaign not found');
+            throw error;
+          }
+        },
+
+        deleteCharacter: async (_parent: unknown, args: { id: string }, ctx: YogaContext) => {
+          const user = requireUser(ctx);
+          const id = String(args.id ?? '').trim();
+          if (!id) throw new GraphQLError('Character not found');
+
+          try {
+            await ctx.dataSource.deleteCharacter({ id, ownerId: user.id, actorRole: user.role });
+            return true;
           } catch (error) {
             if (error instanceof Error && error.message === 'CHARACTER_NOT_FOUND') throw new GraphQLError('Character not found');
             if (error instanceof Error && error.message === 'NOT_AUTHORIZED') throw new GraphQLError('Not authorized');
@@ -714,8 +880,10 @@ export function createYogaServer() {
 
           if (!isValidEmail(email)) throw new GraphQLError('Invalid email');
 
-          const role = await ctx.dataSource.getCampaignMembershipRole({ userId: user.id, campaignId });
-          if (role !== 'OWNER') throw new GraphQLError('Not authorized');
+          if (!isAdmin(user)) {
+            const role = await ctx.dataSource.getCampaignMembershipRole({ userId: user.id, campaignId });
+            if (role !== 'OWNER') throw new GraphQLError('Not authorized');
+          }
 
           const ttlMs = 7 * 24 * 60 * 60 * 1000;
           const invite = await ctx.dataSource.createCampaignInvite({ campaignId, email, ttlMs });
@@ -764,6 +932,7 @@ export function createYogaServer() {
         canEdit: (character: CharacterRecord, _args: unknown, ctx: YogaContext) => {
           const user = ctx.user;
           if (!user) return false;
+          if (user.role === 'ADMIN') return true;
           return character.ownerId === user.id;
         },
         speed: (character: CharacterRecord) => character.speed ?? 30,
@@ -817,7 +986,7 @@ export function createYogaServer() {
       Campaign: {
         characters: async (campaign: CampaignRecord, _args: unknown, ctx: YogaContext) => {
           const user = requireUser(ctx);
-          const visibleCharacters = await ctx.dataSource.listCharactersForUser(user.id);
+          const visibleCharacters = isAdmin(user) ? await ctx.dataSource.listCharacters() : await ctx.dataSource.listCharactersForUser(user.id);
           return visibleCharacters.filter((character) => character.campaignId === campaign.id);
         },
       },

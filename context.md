@@ -28,6 +28,8 @@ We are creating a web app for a cyberpunk tabletop role-playing game. Users shou
 
 - Do not edit rules.md.
 
+- Review plans located at plans/*.prompt.md for detailed breakdowns of larger tasks before starting work on them. If you are working on a task that has a plan, keep the plan open in another window and refer to it as you work.
+
 ## Project Notes (for future context windows)
 
 - Invite emails use `APP_BASE_URL` to build links; keep it aligned with the dev server port you run on (commonly 3001 in this repo).

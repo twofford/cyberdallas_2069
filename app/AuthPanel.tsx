@@ -2,30 +2,11 @@
 
 import * as React from 'react';
 
-type AuthUser = { id: string; email: string };
+import type { AuthUser } from './lib/useMe';
 
-async function graphQLFetch<T>(input: {
-  query: string;
-  variables?: Record<string, unknown>;
-  signal?: AbortSignal;
-}): Promise<T> {
-  const response = await fetch('/api/graphql', {
-    method: 'POST',
-    credentials: 'include',
-    signal: input.signal,
-    headers: {
-      'content-type': 'application/json',
-    },
-    body: JSON.stringify({ query: input.query, variables: input.variables }),
-  });
-
-  const body = (await response.json()) as { data?: T; errors?: Array<{ message: string }> };
-  if (!response.ok || body.errors?.length || !body.data) {
-    const message = body.errors?.map((e) => e.message).join('\n') ?? 'Request failed';
-    throw new Error(message);
-  }
-  return body.data;
-}
+import { graphqlFetch as graphQLFetch } from './lib/graphqlFetch';
+import { LOGOUT_MUTATION, ME_QUERY } from './lib/graphqlQueries';
+import { InlineError } from './ui/InlineError';
 
 export function AuthPanel(props: { onAuthed?: (user: AuthUser) => void } = {}) {
   const [mode, setMode] = React.useState<'login' | 'register'>('login');
@@ -52,14 +33,7 @@ export function AuthPanel(props: { onAuthed?: (user: AuthUser) => void } = {}) {
     (async () => {
       try {
         const data = await graphQLFetch<{ me: AuthUser | null }>({
-          query: /* GraphQL */ `
-            query Me {
-              me {
-                id
-                email
-              }
-            }
-          `,
+          query: ME_QUERY,
           signal: controller.signal,
         });
         if (cancelled) return;
@@ -152,11 +126,7 @@ export function AuthPanel(props: { onAuthed?: (user: AuthUser) => void } = {}) {
     setError(null);
     try {
       await graphQLFetch<{ logout: boolean }>({
-        query: /* GraphQL */ `
-          mutation Logout {
-            logout
-          }
-        `,
+        query: LOGOUT_MUTATION,
       });
     } catch {
       // Best-effort: even if the request fails, clear local UI state.
@@ -177,7 +147,7 @@ export function AuthPanel(props: { onAuthed?: (user: AuthUser) => void } = {}) {
     <section data-auth-hydrated={hydrated ? 'true' : 'false'} data-auth-mode={mode}>
       <h2>Auth</h2>
       {me ? <p>Signed in as: {me.email}</p> : <p>Not signed in.</p>}
-      {error ? <p style={{ color: 'crimson' }}>{error}</p> : null}
+      {error ? <InlineError>{error}</InlineError> : null}
 
       {me ? (
         <button type="button" onClick={handleSignOut} disabled={busy}>

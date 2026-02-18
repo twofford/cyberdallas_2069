@@ -1,6 +1,7 @@
 'use client';
 
-import * as React from 'react';
+import { useEntityFromListQuery } from '../../lib/useEntityFromListQuery';
+import { InlineError } from '../../ui/InlineError';
 
 type Cybernetic = {
   id: string;
@@ -13,77 +14,34 @@ type Cybernetic = {
   skillBonuses: Array<{ name: string; amount: number }>;
 };
 
-async function graphQLFetch<T>(input: { query: string; variables?: Record<string, unknown> }): Promise<T> {
-  const response = await fetch('/api/graphql', {
-    method: 'POST',
-    credentials: 'include',
-    headers: {
-      'content-type': 'application/json',
-    },
-    body: JSON.stringify({ query: input.query, variables: input.variables }),
+export function CyberneticPageClient(props: { cyberneticId: string }) {
+  const { entity: cybernetic, busy, error } = useEntityFromListQuery<Cybernetic, { cybernetics: Cybernetic[] }>({
+    id: props.cyberneticId,
+    query: /* GraphQL */ `
+      query CyberneticDetail {
+        cybernetics {
+          id
+          name
+          shortDescription
+          longDescription
+          price
+          batteryLife
+          statBonuses {
+            stat
+            amount
+          }
+          skillBonuses {
+            name
+            amount
+          }
+        }
+      }
+    `,
+    select: (data) => data.cybernetics,
   });
 
-  const body = (await response.json()) as { data?: T; errors?: Array<{ message: string }> };
-  if (!response.ok || body.errors?.length || !body.data) {
-    const message = body.errors?.map((e) => e.message).join('\n') ?? 'Request failed';
-    throw new Error(message);
-  }
-  return body.data;
-}
-
-export function CyberneticPageClient(props: { cyberneticId: string }) {
-  const [cybernetic, setCybernetic] = React.useState<Cybernetic | null>(null);
-  const [error, setError] = React.useState<string | null>(null);
-  const [busy, setBusy] = React.useState(false);
-
-  React.useEffect(() => {
-    let cancelled = false;
-    setBusy(true);
-    setError(null);
-
-    (async () => {
-      try {
-        const data = await graphQLFetch<{ cybernetics: Cybernetic[] }>({
-          query: /* GraphQL */ `
-            query CyberneticDetail {
-              cybernetics {
-                id
-                name
-                shortDescription
-                longDescription
-                price
-                batteryLife
-                statBonuses {
-                  stat
-                  amount
-                }
-                skillBonuses {
-                  name
-                  amount
-                }
-              }
-            }
-          `,
-        });
-
-        if (cancelled) return;
-        setCybernetic(data.cybernetics.find((c) => c.id === props.cyberneticId) ?? null);
-      } catch (e) {
-        if (cancelled) return;
-        setError(e instanceof Error ? e.message : 'Request failed');
-        setCybernetic(null);
-      } finally {
-        if (!cancelled) setBusy(false);
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [props.cyberneticId]);
-
   if (busy) return <p>Loading cybernetic…</p>;
-  if (error) return <p style={{ color: 'crimson' }}>{error}</p>;
+  if (error) return <InlineError>{error}</InlineError>;
   if (!cybernetic) return <p>Cybernetic not found.</p>;
 
   return (

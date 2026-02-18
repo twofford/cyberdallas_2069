@@ -75,6 +75,7 @@ export type ItemRecord = {
 export type CampaignRecord = {
   id: string;
   name: string;
+  startingMoney?: number;
 };
 
 export type CharacterRecord = {
@@ -82,6 +83,7 @@ export type CharacterRecord = {
   name: string;
   isPublic?: boolean;
   ownerId?: string;
+  money?: number;
   speed?: number;
   hitPoints?: number;
   stats?: Partial<StatsRecord>;
@@ -99,22 +101,27 @@ export const campaigns: CampaignRecord[] = [
   {
     id: 'camp_1',
     name: 'Neon Rain',
+    startingMoney: 0,
   },
   {
     id: 'camp_2',
     name: 'Chrome Syndicate',
+    startingMoney: 0,
   },
   {
     id: 'camp_3',
     name: 'Synthetic Dawn',
+    startingMoney: 0,
   },
   {
     id: 'camp_4',
     name: 'Midnight Circuit',
+    startingMoney: 0,
   },
   {
     id: 'camp_5',
     name: 'Ghost Protocol',
+    startingMoney: 0,
   },
 ];
 
@@ -187,6 +194,7 @@ export const characters: CharacterRecord[] = [
     id: 'c_1',
     name: 'Nova',
     isPublic: false,
+    money: 250,
     speed: 30,
     hitPoints: 5,
     campaignId: 'camp_1',
@@ -211,6 +219,7 @@ export const characters: CharacterRecord[] = [
     id: 'c_2',
     name: 'Street Thug',
     isPublic: true,
+    money: 0,
     speed: 30,
     hitPoints: 3,
     stats: {
@@ -227,6 +236,7 @@ export const characters: CharacterRecord[] = [
     id: 'c_3',
     name: 'Ghost',
     isPublic: false,
+    money: 1000,
     speed: 30,
     hitPoints: 5,
     campaignId: 'camp_2',

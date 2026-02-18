@@ -1,6 +1,7 @@
 'use client';
 
-import * as React from 'react';
+import { useEntityFromListQuery } from '../../lib/useEntityFromListQuery';
+import { InlineError } from '../../ui/InlineError';
 
 type Weapon = {
   id: string;
@@ -15,73 +16,30 @@ type Weapon = {
   longDescription: string;
 };
 
-async function graphQLFetch<T>(input: { query: string; variables?: Record<string, unknown> }): Promise<T> {
-  const response = await fetch('/api/graphql', {
-    method: 'POST',
-    credentials: 'include',
-    headers: {
-      'content-type': 'application/json',
-    },
-    body: JSON.stringify({ query: input.query, variables: input.variables }),
+export function WeaponPageClient(props: { weaponId: string }) {
+  const { entity: weapon, busy, error } = useEntityFromListQuery<Weapon, { weapons: Weapon[] }>({
+    id: props.weaponId,
+    query: /* GraphQL */ `
+      query WeaponDetail {
+        weapons {
+          id
+          name
+          price
+          weight
+          maxRange
+          maxAmmoCount
+          type
+          condition
+          shortDescription
+          longDescription
+        }
+      }
+    `,
+    select: (data) => data.weapons,
   });
 
-  const body = (await response.json()) as { data?: T; errors?: Array<{ message: string }> };
-  if (!response.ok || body.errors?.length || !body.data) {
-    const message = body.errors?.map((e) => e.message).join('\n') ?? 'Request failed';
-    throw new Error(message);
-  }
-  return body.data;
-}
-
-export function WeaponPageClient(props: { weaponId: string }) {
-  const [weapon, setWeapon] = React.useState<Weapon | null>(null);
-  const [error, setError] = React.useState<string | null>(null);
-  const [busy, setBusy] = React.useState(false);
-
-  React.useEffect(() => {
-    let cancelled = false;
-    setBusy(true);
-    setError(null);
-
-    (async () => {
-      try {
-        const data = await graphQLFetch<{ weapons: Weapon[] }>({
-          query: /* GraphQL */ `
-            query WeaponDetail {
-              weapons {
-                id
-                name
-                price
-                weight
-                maxRange
-                maxAmmoCount
-                type
-                condition
-                shortDescription
-                longDescription
-              }
-            }
-          `,
-        });
-
-        if (cancelled) return;
-        setWeapon(data.weapons.find((w) => w.id === props.weaponId) ?? null);
-      } catch (e) {
-        if (cancelled) return;
-        setError(e instanceof Error ? e.message : 'Request failed');
-        setWeapon(null);
-      } finally {
-        if (!cancelled) setBusy(false);
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [props.weaponId]);
-
   if (busy) return <p>Loading weapon…</p>;
-  if (error) return <p style={{ color: 'crimson' }}>{error}</p>;
+  if (error) return <InlineError>{error}</InlineError>;
   if (!weapon) return <p>Weapon not found.</p>;
 
   return (

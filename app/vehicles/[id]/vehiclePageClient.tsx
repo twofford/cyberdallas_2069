@@ -1,6 +1,7 @@
 'use client';
 
-import * as React from 'react';
+import { useEntityFromListQuery } from '../../lib/useEntityFromListQuery';
+import { InlineError } from '../../ui/InlineError';
 
 type Vehicle = {
   id: string;
@@ -12,70 +13,27 @@ type Vehicle = {
   longDescription: string;
 };
 
-async function graphQLFetch<T>(input: { query: string; variables?: Record<string, unknown> }): Promise<T> {
-  const response = await fetch('/api/graphql', {
-    method: 'POST',
-    credentials: 'include',
-    headers: {
-      'content-type': 'application/json',
-    },
-    body: JSON.stringify({ query: input.query, variables: input.variables }),
+export function VehiclePageClient(props: { vehicleId: string }) {
+  const { entity: vehicle, busy, error } = useEntityFromListQuery<Vehicle, { vehicles: Vehicle[] }>({
+    id: props.vehicleId,
+    query: /* GraphQL */ `
+      query VehicleDetail {
+        vehicles {
+          id
+          name
+          price
+          speed
+          armor
+          shortDescription
+          longDescription
+        }
+      }
+    `,
+    select: (data) => data.vehicles,
   });
 
-  const body = (await response.json()) as { data?: T; errors?: Array<{ message: string }> };
-  if (!response.ok || body.errors?.length || !body.data) {
-    const message = body.errors?.map((e) => e.message).join('\n') ?? 'Request failed';
-    throw new Error(message);
-  }
-  return body.data;
-}
-
-export function VehiclePageClient(props: { vehicleId: string }) {
-  const [vehicle, setVehicle] = React.useState<Vehicle | null>(null);
-  const [error, setError] = React.useState<string | null>(null);
-  const [busy, setBusy] = React.useState(false);
-
-  React.useEffect(() => {
-    let cancelled = false;
-    setBusy(true);
-    setError(null);
-
-    (async () => {
-      try {
-        const data = await graphQLFetch<{ vehicles: Vehicle[] }>({
-          query: /* GraphQL */ `
-            query VehicleDetail {
-              vehicles {
-                id
-                name
-                price
-                speed
-                armor
-                shortDescription
-                longDescription
-              }
-            }
-          `,
-        });
-
-        if (cancelled) return;
-        setVehicle(data.vehicles.find((v) => v.id === props.vehicleId) ?? null);
-      } catch (e) {
-        if (cancelled) return;
-        setError(e instanceof Error ? e.message : 'Request failed');
-        setVehicle(null);
-      } finally {
-        if (!cancelled) setBusy(false);
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [props.vehicleId]);
-
   if (busy) return <p>Loading vehicle…</p>;
-  if (error) return <p style={{ color: 'crimson' }}>{error}</p>;
+  if (error) return <InlineError>{error}</InlineError>;
   if (!vehicle) return <p>Vehicle not found.</p>;
 
   return (

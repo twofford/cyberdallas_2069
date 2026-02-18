@@ -1,6 +1,6 @@
-import * as React from 'react';
-
 import Link from 'next/link';
+
+import { PageShell } from '../../ui/PageShell';
 
 import { CyberneticPageClient } from './cyberneticPageClient';
 
@@ -8,9 +8,7 @@ export default async function CyberneticPage(props: { params: { id: string } | P
   const params = await Promise.resolve(props.params);
 
   return (
-    <main style={{ padding: 24 }}>
-      <h1>CyberDallas 2069</h1>
-
+    <PageShell>
       <section>
         <h2>Cybernetic</h2>
         <p>
@@ -18,6 +16,6 @@ export default async function CyberneticPage(props: { params: { id: string } | P
         </p>
         <CyberneticPageClient cyberneticId={params.id} />
       </section>
-    </main>
+    </PageShell>
   );
 }

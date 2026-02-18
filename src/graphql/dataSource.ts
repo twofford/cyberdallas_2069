@@ -16,7 +16,10 @@ export type UserRecord = {
   id: string;
   email: string;
   passwordHash: string;
+  role: UserRole;
 };
+
+export type UserRole = 'USER' | 'ADMIN';
 
 export type DataSourceKind = 'inMemory' | 'prisma';
 
@@ -25,6 +28,15 @@ export type DataSource = {
   getCampaignById(id: string): Promise<CampaignRecord | null>;
   listCampaigns(): Promise<CampaignRecord[]>;
   listCampaignsForUser(userId: string): Promise<CampaignRecord[]>;
+  createCampaign(input: { ownerId: string; name: string; startingMoney?: number }): Promise<CampaignRecord>;
+  updateCampaign(input: {
+    id: string;
+    ownerId: string;
+    actorRole?: UserRole;
+    name?: string;
+    startingMoney?: number;
+  }): Promise<CampaignRecord>;
+  deleteCampaign(input: { id: string; ownerId: string; actorRole?: UserRole }): Promise<void>;
   listCharacters(): Promise<CharacterRecord[]>;
   listCharactersForUser(userId: string): Promise<CharacterRecord[]>;
   createCharacter(input: {
@@ -32,6 +44,7 @@ export type DataSource = {
     campaignId?: string | null;
     name: string;
     isPublic?: boolean;
+    money?: number;
     stats?: Partial<StatsRecord>;
     skills?: SkillRecord[];
     cyberneticIds?: string[];
@@ -42,13 +55,17 @@ export type DataSource = {
   updateCharacter(input: {
     id: string;
     ownerId: string;
+    actorRole?: UserRole;
+    campaignId?: string | null;
     name?: string;
+    money?: number;
     stats?: Partial<StatsRecord>;
     skills?: SkillRecord[];
     cyberneticIds?: string[];
     weaponIds?: string[];
     itemIds?: string[];
   }): Promise<CharacterRecord>;
+  deleteCharacter(input: { id: string; ownerId: string; actorRole?: UserRole }): Promise<void>;
   listCybernetics(): Promise<CyberneticRecord[]>;
   listWeapons(): Promise<WeaponRecord[]>;
   listItems(): Promise<ItemRecord[]>;
@@ -70,9 +87,9 @@ export type DataSource = {
     nowMs?: number;
   }): Promise<CampaignRecord>;
 
-  getUserById(id: string): Promise<Pick<UserRecord, 'id' | 'email'> | null>;
+  getUserById(id: string): Promise<Pick<UserRecord, 'id' | 'email' | 'role'> | null>;
   findUserByEmail(email: string): Promise<UserRecord | null>;
-  createUser(input: { email: string; passwordHash: string }): Promise<Pick<UserRecord, 'id' | 'email'>>;
+  createUser(input: { email: string; passwordHash: string; role?: UserRole }): Promise<Pick<UserRecord, 'id' | 'email' | 'role'>>;
 };
 
 type InMemoryCampaignInvite = {
@@ -99,6 +116,7 @@ function createInMemoryDataSource(): DataSource {
   const users: UserRecord[] = [];
   const campaignMembers = new Map<string, Map<string, 'OWNER' | 'MEMBER'>>();
   const invites: InMemoryCampaignInvite[] = [];
+  const campaignStore: CampaignRecord[] = campaigns.map((c) => ({ ...c, startingMoney: c.startingMoney ?? 0 }));
   const characterStore: CharacterRecord[] = characters.map((c) => ({
     ...c,
     stats: c.stats ? { ...c.stats } : undefined,
@@ -135,14 +153,72 @@ function createInMemoryDataSource(): DataSource {
   return {
     kind: 'inMemory',
     async getCampaignById(id: string) {
-      return campaigns.find((c) => c.id === id) ?? null;
+      return campaignStore.find((c) => c.id === id) ?? null;
     },
     async listCampaigns() {
-      return campaigns;
+      return campaignStore;
     },
     async listCampaignsForUser(userId: string) {
       const memberships = getMembershipsByUser(userId);
-      return campaigns.filter((c) => memberships.has(c.id));
+      return campaignStore.filter((c) => memberships.has(c.id));
+    },
+    async createCampaign(input: { ownerId: string; name: string; startingMoney?: number }) {
+      const record: CampaignRecord = {
+        id: `camp_${crypto.randomUUID()}`,
+        name: input.name,
+        startingMoney: input.startingMoney ?? 0,
+      };
+      campaignStore.push(record);
+      await this.addUserToCampaign({ userId: input.ownerId, campaignId: record.id, role: 'OWNER' });
+      return record;
+    },
+
+    async updateCampaign(input: { id: string; ownerId: string; actorRole?: UserRole; name?: string; startingMoney?: number }) {
+      const index = campaignStore.findIndex((c) => c.id === input.id);
+      if (index === -1) throw new Error('CAMPAIGN_NOT_FOUND');
+      const existing = campaignStore[index];
+      if (!existing) throw new Error('CAMPAIGN_NOT_FOUND');
+
+      const isAdmin = input.actorRole === 'ADMIN';
+      if (!isAdmin) {
+        const role = getMembershipsByUser(input.ownerId).get(input.id) ?? null;
+        if (role !== 'OWNER') throw new Error('NOT_AUTHORIZED');
+      }
+
+      const next: CampaignRecord = {
+        ...existing,
+        name: input.name !== undefined ? input.name : existing.name,
+        startingMoney: input.startingMoney !== undefined ? input.startingMoney : (existing.startingMoney ?? 0),
+      };
+      campaignStore[index] = next;
+      return next;
+    },
+
+    async deleteCampaign(input: { id: string; ownerId: string; actorRole?: UserRole }) {
+      const index = campaignStore.findIndex((c) => c.id === input.id);
+      if (index === -1) throw new Error('CAMPAIGN_NOT_FOUND');
+      const existing = campaignStore[index];
+      if (!existing) throw new Error('CAMPAIGN_NOT_FOUND');
+
+      const isAdmin = input.actorRole === 'ADMIN';
+      if (!isAdmin) {
+        const role = getMembershipsByUser(input.ownerId).get(input.id) ?? null;
+        if (role !== 'OWNER') throw new Error('NOT_AUTHORIZED');
+      }
+
+      for (const c of characterStore) {
+        if (c.campaignId === input.id) c.campaignId = undefined;
+      }
+
+      for (const memberships of campaignMembers.values()) {
+        memberships.delete(input.id);
+      }
+
+      for (let i = invites.length - 1; i >= 0; i--) {
+        if (invites[i]?.campaignId === input.id) invites.splice(i, 1);
+      }
+
+      campaignStore.splice(index, 1);
     },
     async listCharacters() {
       return characterStore;
@@ -156,6 +232,7 @@ function createInMemoryDataSource(): DataSource {
       campaignId?: string | null;
       name: string;
       isPublic?: boolean;
+      money?: number;
       stats?: Partial<StatsRecord>;
       skills?: SkillRecord[];
       cyberneticIds?: string[];
@@ -164,8 +241,8 @@ function createInMemoryDataSource(): DataSource {
       vehicleIds?: string[];
     }) {
       const campaignId = input.campaignId ?? null;
+      const campaign = campaignId ? campaignStore.find((c) => c.id === campaignId) : null;
       if (campaignId) {
-        const campaign = campaigns.find((c) => c.id === campaignId);
         if (!campaign) throw new Error('CAMPAIGN_NOT_FOUND');
       }
 
@@ -185,6 +262,7 @@ function createInMemoryDataSource(): DataSource {
         isPublic: input.isPublic ?? false,
         ownerId: input.ownerId,
         campaignId: campaignId ?? undefined,
+        money: input.money ?? (campaign?.startingMoney ?? 0),
         speed: 30,
         hitPoints: 5,
         stats,
@@ -202,7 +280,10 @@ function createInMemoryDataSource(): DataSource {
     async updateCharacter(input: {
       id: string;
       ownerId: string;
+      actorRole?: UserRole;
+      campaignId?: string | null;
       name?: string;
+      money?: number;
       stats?: Partial<StatsRecord>;
       skills?: SkillRecord[];
       cyberneticIds?: string[];
@@ -212,12 +293,27 @@ function createInMemoryDataSource(): DataSource {
       const index = characterStore.findIndex((c) => c.id === input.id);
       if (index === -1) throw new Error('CHARACTER_NOT_FOUND');
 
-      const existing = characterStore[index]!;
-      if (existing.ownerId !== input.ownerId) throw new Error('NOT_AUTHORIZED');
+      const existing = characterStore[index];
+      if (!existing) throw new Error('CHARACTER_NOT_FOUND');
+      const isAdmin = input.actorRole === 'ADMIN';
+      if (!isAdmin && existing.ownerId !== input.ownerId) throw new Error('NOT_AUTHORIZED');
+
+      if (input.campaignId !== undefined) {
+        if (existing.isPublic) throw new Error('NOT_AUTHORIZED');
+        if (input.campaignId) {
+          const campaign = campaigns.find((c) => c.id === input.campaignId);
+          if (!campaign) throw new Error('CAMPAIGN_NOT_FOUND');
+        }
+      }
+
+      const nextCampaignId =
+        input.campaignId === undefined ? existing.campaignId : input.campaignId === null ? undefined : input.campaignId;
 
       const next: CharacterRecord = {
         ...existing,
+        campaignId: nextCampaignId,
         name: input.name !== undefined ? input.name : existing.name,
+        money: input.money !== undefined ? input.money : (existing.money ?? 0),
         stats: {
           ...(existing.stats ?? { brawn: 0, charm: 0, intelligence: 0, reflexes: 0, tech: 0, luck: 0 }),
           ...(input.stats ?? {}),
@@ -230,6 +326,18 @@ function createInMemoryDataSource(): DataSource {
 
       characterStore[index] = next;
       return next;
+    },
+
+    async deleteCharacter(input: { id: string; ownerId: string; actorRole?: UserRole }) {
+      const index = characterStore.findIndex((c) => c.id === input.id);
+      if (index === -1) throw new Error('CHARACTER_NOT_FOUND');
+
+      const existing = characterStore[index];
+      if (!existing) throw new Error('CHARACTER_NOT_FOUND');
+      const isAdmin = input.actorRole === 'ADMIN';
+      if (!isAdmin && !isOwnedByUser(existing, input.ownerId)) throw new Error('NOT_AUTHORIZED');
+
+      characterStore.splice(index, 1);
     },
     async listCybernetics() {
       return cybernetics;
@@ -245,7 +353,7 @@ function createInMemoryDataSource(): DataSource {
     },
 
     async addUserToCampaign(input: { userId: string; campaignId: string; role?: 'AUTO' | 'OWNER' | 'MEMBER' }) {
-      const campaign = campaigns.find((c) => c.id === input.campaignId);
+      const campaign = campaignStore.find((c) => c.id === input.campaignId);
       if (!campaign) throw new Error('CAMPAIGN_NOT_FOUND');
 
       const memberships = getMembershipsByUser(input.userId);
@@ -268,7 +376,7 @@ function createInMemoryDataSource(): DataSource {
     },
 
     async createCampaignInvite(input: { campaignId: string; email: string; ttlMs: number }) {
-      const campaign = campaigns.find((c) => c.id === input.campaignId);
+      const campaign = campaignStore.find((c) => c.id === input.campaignId);
       if (!campaign) throw new Error('CAMPAIGN_NOT_FOUND');
 
       const nowMs = Date.now();
@@ -301,28 +409,28 @@ function createInMemoryDataSource(): DataSource {
       invite.acceptedAtMs = nowMs;
       invite.acceptedByUserId = input.userId;
 
-      const campaign = campaigns.find((c) => c.id === invite.campaignId);
+      const campaign = campaignStore.find((c) => c.id === invite.campaignId);
       if (!campaign) throw new Error('CAMPAIGN_NOT_FOUND');
       return campaign;
     },
 
     async getUserById(id: string) {
       const user = users.find((u) => u.id === id);
-      return user ? { id: user.id, email: user.email } : null;
+      return user ? { id: user.id, email: user.email, role: user.role } : null;
     },
     async findUserByEmail(email: string) {
       return users.find((u) => u.email.toLowerCase() === email.toLowerCase()) ?? null;
     },
-    async createUser(input: { email: string; passwordHash: string }) {
+    async createUser(input: { email: string; passwordHash: string; role?: UserRole }) {
       const existing = users.find((u) => u.email.toLowerCase() === input.email.toLowerCase());
       if (existing) {
         throw new Error('DUPLICATE_EMAIL');
       }
 
       const id = `u_${users.length + 1}`;
-      const user: UserRecord = { id, email: input.email, passwordHash: input.passwordHash };
+      const user: UserRecord = { id, email: input.email, passwordHash: input.passwordHash, role: input.role ?? 'USER' };
       users.push(user);
-      return { id: user.id, email: user.email };
+      return { id: user.id, email: user.email, role: user.role };
     },
   };
 }
@@ -334,6 +442,7 @@ function createPrismaDataSource(): DataSource {
     id: string;
     name: string;
     isPublic: boolean;
+    money: number;
     speed: number;
     hitPoints: number;
     brawn: number;
@@ -354,6 +463,7 @@ function createPrismaDataSource(): DataSource {
       id: row.id,
       name: row.name,
       isPublic: row.isPublic,
+      money: row.money,
       speed: row.speed,
       hitPoints: row.hitPoints,
       ownerId: row.ownerId ?? undefined,
@@ -377,25 +487,87 @@ function createPrismaDataSource(): DataSource {
   return {
     kind: 'prisma',
     async getCampaignById(id: string) {
-      const row = await prisma.campaign.findUnique({ where: { id }, select: { id: true, name: true } });
+      const row = await prisma.campaign.findUnique({ where: { id }, select: { id: true, name: true, startingMoney: true } });
       return row ?? null;
     },
     async listCampaigns() {
-      const rows = await prisma.campaign.findMany({
-        select: { id: true, name: true },
+      return prisma.campaign.findMany({
+        select: { id: true, name: true, startingMoney: true },
       });
-      return rows;
     },
     async listCampaignsForUser(userId: string) {
-      const rows = await prisma.campaign.findMany({
+      return prisma.campaign.findMany({
         where: {
           memberships: {
             some: { userId },
           },
         },
-        select: { id: true, name: true },
+        select: { id: true, name: true, startingMoney: true },
       });
-      return rows;
+    },
+    async createCampaign(input: { ownerId: string; name: string; startingMoney?: number }) {
+      const row = await prisma.campaign.create({
+        data: {
+          name: input.name,
+          startingMoney: input.startingMoney ?? 0,
+          memberships: {
+            create: {
+              userId: input.ownerId,
+              role: 'OWNER',
+            },
+          },
+        },
+        select: { id: true, name: true, startingMoney: true },
+      });
+      return row;
+    },
+
+    async updateCampaign(input: { id: string; ownerId: string; actorRole?: UserRole; name?: string; startingMoney?: number }) {
+      const existing = await prisma.campaign.findUnique({
+        where: { id: input.id },
+        select: { id: true },
+      });
+      if (!existing) throw new Error('CAMPAIGN_NOT_FOUND');
+
+      const isAdmin = input.actorRole === 'ADMIN';
+      if (!isAdmin) {
+        const membership = await prisma.campaignMembership.findUnique({
+          where: { userId_campaignId: { userId: input.ownerId, campaignId: input.id } },
+          select: { role: true },
+        });
+        if (membership?.role !== 'OWNER') throw new Error('NOT_AUTHORIZED');
+      }
+
+      return prisma.campaign.update({
+        where: { id: input.id },
+        data: {
+          ...(input.name !== undefined ? { name: input.name } : {}),
+          ...(input.startingMoney !== undefined ? { startingMoney: input.startingMoney } : {}),
+        },
+        select: { id: true, name: true, startingMoney: true },
+      });
+    },
+
+    async deleteCampaign(input: { id: string; ownerId: string; actorRole?: UserRole }) {
+      const existing = await prisma.campaign.findUnique({ where: { id: input.id }, select: { id: true } });
+      if (!existing) throw new Error('CAMPAIGN_NOT_FOUND');
+
+      const isAdmin = input.actorRole === 'ADMIN';
+      if (!isAdmin) {
+        const membership = await prisma.campaignMembership.findUnique({
+          where: { userId_campaignId: { userId: input.ownerId, campaignId: input.id } },
+          select: { role: true },
+        });
+        if (membership?.role !== 'OWNER') throw new Error('NOT_AUTHORIZED');
+      }
+
+      await prisma.$transaction(async (tx) => {
+        await tx.character.updateMany({
+          where: { campaignId: input.id },
+          data: { campaignId: null },
+        });
+        await tx.campaign.delete({ where: { id: input.id } });
+      });
     },
     async listCharacters() {
       const rows = await prisma.character.findMany({
@@ -403,6 +575,7 @@ function createPrismaDataSource(): DataSource {
           id: true,
           name: true,
           isPublic: true,
+          money: true,
           speed: true,
           hitPoints: true,
           brawn: true,
@@ -435,6 +608,7 @@ function createPrismaDataSource(): DataSource {
           id: true,
           name: true,
           isPublic: true,
+          money: true,
           speed: true,
           hitPoints: true,
           brawn: true,
@@ -461,6 +635,7 @@ function createPrismaDataSource(): DataSource {
       campaignId?: string | null;
       name: string;
       isPublic?: boolean;
+      money?: number;
       stats?: Partial<StatsRecord>;
       skills?: SkillRecord[];
       cyberneticIds?: string[];
@@ -468,11 +643,21 @@ function createPrismaDataSource(): DataSource {
       itemIds?: string[];
       vehicleIds?: string[];
     }) {
+      let money = input.money;
+      if (money === undefined && input.campaignId) {
+        const campaign = await prisma.campaign.findUnique({
+          where: { id: input.campaignId },
+          select: { startingMoney: true },
+        });
+        money = campaign?.startingMoney ?? 0;
+      }
+
       const stats = input.stats ?? {};
       const row = await prisma.character.create({
         data: {
           name: input.name,
           isPublic: input.isPublic ?? false,
+          money: money ?? 0,
           ownerId: input.ownerId,
           campaignId: input.campaignId ?? null,
           ...(stats.brawn !== undefined ? { brawn: stats.brawn } : {}),
@@ -505,6 +690,7 @@ function createPrismaDataSource(): DataSource {
           id: true,
           name: true,
           isPublic: true,
+          money: true,
           speed: true,
           hitPoints: true,
           brawn: true,
@@ -529,16 +715,24 @@ function createPrismaDataSource(): DataSource {
     async updateCharacter(input: {
       id: string;
       ownerId: string;
+      actorRole?: UserRole;
+      campaignId?: string | null;
       name?: string;
+      money?: number;
       stats?: Partial<StatsRecord>;
       skills?: SkillRecord[];
       cyberneticIds?: string[];
       weaponIds?: string[];
       itemIds?: string[];
     }) {
-      const existing = await prisma.character.findUnique({ where: { id: input.id }, select: { ownerId: true } });
+      const existing = await prisma.character.findUnique({
+        where: { id: input.id },
+        select: { ownerId: true, isPublic: true },
+      });
       if (!existing) throw new Error('CHARACTER_NOT_FOUND');
-      if (existing.ownerId !== input.ownerId) throw new Error('NOT_AUTHORIZED');
+      const isAdmin = input.actorRole === 'ADMIN';
+      if (!isAdmin && existing.ownerId !== input.ownerId) throw new Error('NOT_AUTHORIZED');
+      if (existing.isPublic && input.campaignId !== undefined) throw new Error('NOT_AUTHORIZED');
 
       const stats = input.stats ?? {};
       const row = await prisma.$transaction(async (tx) => {
@@ -585,7 +779,9 @@ function createPrismaDataSource(): DataSource {
         return tx.character.update({
           where: { id: input.id },
           data: {
+            ...(input.campaignId !== undefined ? { campaignId: input.campaignId } : {}),
             ...(input.name !== undefined ? { name: input.name } : {}),
+            ...(input.money !== undefined ? { money: input.money } : {}),
             ...(stats.brawn !== undefined ? { brawn: stats.brawn } : {}),
             ...(stats.charm !== undefined ? { charm: stats.charm } : {}),
             ...(stats.intelligence !== undefined ? { intelligence: stats.intelligence } : {}),
@@ -597,6 +793,7 @@ function createPrismaDataSource(): DataSource {
             id: true,
             name: true,
             isPublic: true,
+            money: true,
             speed: true,
             hitPoints: true,
             brawn: true,
@@ -617,6 +814,22 @@ function createPrismaDataSource(): DataSource {
       });
 
       return mapCharacterRow(row);
+    },
+
+    async deleteCharacter(input: { id: string; ownerId: string; actorRole?: UserRole }) {
+      const existing = await prisma.character.findUnique({ where: { id: input.id }, select: { ownerId: true } });
+      if (!existing) throw new Error('CHARACTER_NOT_FOUND');
+      const isAdmin = input.actorRole === 'ADMIN';
+      if (!isAdmin && existing.ownerId !== input.ownerId) throw new Error('NOT_AUTHORIZED');
+
+      await prisma.$transaction(async (tx) => {
+        await tx.characterSkill.deleteMany({ where: { characterId: input.id } });
+        await tx.characterCybernetic.deleteMany({ where: { characterId: input.id } });
+        await tx.characterWeapon.deleteMany({ where: { characterId: input.id } });
+        await tx.characterItem.deleteMany({ where: { characterId: input.id } });
+        await tx.characterVehicle.deleteMany({ where: { characterId: input.id } });
+        await tx.character.delete({ where: { id: input.id } });
+      });
     },
     async listCybernetics() {
       return prisma.cybernetic.findMany({
@@ -775,23 +988,23 @@ function createPrismaDataSource(): DataSource {
     async getUserById(id: string) {
       const row = await prisma.user.findUnique({
         where: { id },
-        select: { id: true, email: true },
+        select: { id: true, email: true, role: true },
       });
-      return row ?? null;
+      return row ? { id: row.id, email: row.email, role: row.role } : null;
     },
     async findUserByEmail(email: string) {
       const row = await prisma.user.findUnique({
         where: { email },
-        select: { id: true, email: true, passwordHash: true },
+        select: { id: true, email: true, passwordHash: true, role: true },
       });
       return row ?? null;
     },
-    async createUser(input: { email: string; passwordHash: string }) {
+    async createUser(input: { email: string; passwordHash: string; role?: UserRole }) {
       const row = await prisma.user.create({
-        data: { email: input.email, passwordHash: input.passwordHash },
-        select: { id: true, email: true },
+        data: { email: input.email, passwordHash: input.passwordHash, ...(input.role ? { role: input.role } : {}) },
+        select: { id: true, email: true, role: true },
       });
-      return row;
+      return { id: row.id, email: row.email, role: row.role };
     },
   };
 }

@@ -12,10 +12,16 @@ enum CampaignRole {
   MEMBER
 }
 
+enum UserRole {
+  USER
+  ADMIN
+}
+
 model User {
   id           String   @id @default(cuid())
   email        String   @unique
   passwordHash String
+  role         UserRole @default(USER)
   campaignMemberships CampaignMembership[]
   acceptedCampaignInvites CampaignInvite[] @relation("AcceptedInvites")
   characters   Character[]
@@ -26,6 +32,7 @@ model User {
 model Campaign {
   id         String      @id @default(cuid())
   name       String
+  startingMoney Int      @default(0)
   characters Character[]
   memberships CampaignMembership[]
   invites    CampaignInvite[]
@@ -37,6 +44,7 @@ model Character {
   id           String  @id @default(cuid())
   name         String
   isPublic     Boolean @default(false)
+  money        Int     @default(0)
   speed        Int     @default(30)
   hitPoints    Int     @default(5)
   brawn        Int     @default(0)

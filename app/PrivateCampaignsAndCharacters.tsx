@@ -4,9 +4,11 @@ import * as React from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 
-type Campaign = { id: string; name: string };
+import { graphqlFetch as graphQLFetch } from './lib/graphqlFetch';
+import { useMe } from './lib/useMe';
+import { InlineError } from './ui/InlineError';
 
-type AuthUser = { id: string; email: string };
+type Campaign = { id: string; name: string };
 
 type Character = { id: string; name: string; isPublic: boolean; campaign: { id: string; name: string } | null };
 
@@ -19,36 +21,14 @@ type OwnerCampaignsData = {
   ownerCampaigns: Array<{ id: string }>;
 };
 
-async function graphQLFetch<T>(input: {
-  query: string;
-  variables?: Record<string, unknown>;
-}): Promise<T> {
-  const response = await fetch('/api/graphql', {
-    method: 'POST',
-    credentials: 'include',
-    headers: {
-      'content-type': 'application/json',
-    },
-    body: JSON.stringify({ query: input.query, variables: input.variables }),
-  });
-
-  const body = (await response.json()) as { data?: T; errors?: Array<{ message: string }> };
-  if (!response.ok || body.errors?.length || !body.data) {
-    const message = body.errors?.map((e) => e.message).join('\n') ?? 'Request failed';
-    throw new Error(message);
-  }
-  return body.data;
-}
-
 export function PrivateCampaignsAndCharacters() {
   const router = useRouter();
-  const [signedIn, setSignedIn] = React.useState(false);
+  const { me } = useMe();
+  const signedIn = Boolean(me);
   const [data, setData] = React.useState<PrivateData | null>(null);
   const [ownerCampaignIds, setOwnerCampaignIds] = React.useState<Set<string>>(new Set());
   const [error, setError] = React.useState<string | null>(null);
   const [busy, setBusy] = React.useState(false);
-  const [inviteBusy, setInviteBusy] = React.useState<string | null>(null);
-  const [inviteStatus, setInviteStatus] = React.useState<string | null>(null);
 
   const refreshPrivateData = React.useCallback(async () => {
     const result = await graphQLFetch<PrivateData>({
@@ -86,49 +66,6 @@ export function PrivateCampaignsAndCharacters() {
   }, []);
 
   React.useEffect(() => {
-    let cancelled = false;
-
-    async function refreshMe() {
-      try {
-        const result = await graphQLFetch<{ me: AuthUser | null }>({
-          query: /* GraphQL */ `
-            query Me {
-              me {
-                id
-                email
-              }
-            }
-          `,
-        });
-        if (cancelled) return;
-        setSignedIn(Boolean(result.me));
-        setError(null);
-      } catch (e) {
-        if (cancelled) return;
-        const message = e instanceof Error ? e.message : 'Request failed';
-        if (/not authenticated/i.test(message)) {
-          setSignedIn(false);
-          setError(null);
-          return;
-        }
-        setSignedIn(false);
-        setError(message);
-      }
-    }
-
-    refreshMe();
-
-    const onChanged = () => {
-      refreshMe();
-    };
-    window.addEventListener('authTokenChanged', onChanged);
-    return () => {
-      cancelled = true;
-      window.removeEventListener('authTokenChanged', onChanged);
-    };
-  }, []);
-
-  React.useEffect(() => {
     if (!signedIn) {
       setData(null);
       setOwnerCampaignIds(new Set());
@@ -160,30 +97,6 @@ export function PrivateCampaignsAndCharacters() {
     };
   }, [signedIn, refreshPrivateData]);
 
-  async function sendInvite(campaignId: string, email: string) {
-    if (!signedIn) return;
-    setInviteBusy(campaignId);
-    setInviteStatus(null);
-    try {
-      await graphQLFetch<{ createCampaignInvite: { token: string; expiresAt: string } }>({
-        query: /* GraphQL */ `
-          mutation Invite($campaignId: ID!, $email: String!) {
-            createCampaignInvite(campaignId: $campaignId, email: $email) {
-              token
-              expiresAt
-            }
-          }
-        `,
-        variables: { campaignId, email },
-      });
-      setInviteStatus('Invite sent.');
-    } catch (e) {
-      setInviteStatus(e instanceof Error ? e.message : 'Request failed');
-    } finally {
-      setInviteBusy(null);
-    }
-  }
-
   return (
     <>
       <section>
@@ -193,23 +106,24 @@ export function PrivateCampaignsAndCharacters() {
         ) : busy ? (
           <p>Loading campaigns…</p>
         ) : error ? (
-          <p style={{ color: 'crimson' }}>{error}</p>
+          <InlineError>{error}</InlineError>
         ) : (
-          <ul>
-            {(data?.campaigns ?? []).map((campaign) => (
-              <li key={campaign.id}>
-                {campaign.name}
-                {ownerCampaignIds.has(campaign.id) ? (
-                  <InviteForm
-                    disabled={inviteBusy === campaign.id}
-                    onSend={(email) => sendInvite(campaign.id, email)}
-                  />
-                ) : null}
-              </li>
-            ))}
-          </ul>
+          <>
+            <p>
+              <button type="button" onClick={() => router.push('/campaigns/new')}>
+                New campaign
+              </button>
+            </p>
+
+            <ul>
+              {(data?.campaigns ?? []).map((campaign) => (
+                <li key={campaign.id}>
+                  <Link href={`/campaigns/${campaign.id}`}>{campaign.name}</Link>
+                </li>
+              ))}
+            </ul>
+          </>
         )}
-        {inviteStatus ? <p>{inviteStatus}</p> : null}
       </section>
 
       <section>
@@ -219,7 +133,7 @@ export function PrivateCampaignsAndCharacters() {
         ) : busy ? (
           <p>Loading characters…</p>
         ) : error ? (
-          <p style={{ color: 'crimson' }}>{error}</p>
+          <InlineError>{error}</InlineError>
         ) : (
           <>
             <p>
@@ -229,39 +143,52 @@ export function PrivateCampaignsAndCharacters() {
             </p>
 
             <ul>
-              {(data?.characters ?? []).map((character) => (
-                <li key={character.id}>
-                  <Link href={`/characters/${character.id}`}>{character.name}</Link> —{' '}
-                  {character.campaign?.name ?? (character.isPublic ? 'Archetype' : 'No campaign')}
-                </li>
-              ))}
+              {(data?.characters ?? [])
+                .filter((c) => !c.isPublic)
+                .map((character) => (
+                  <li key={character.id}>
+                    <Link href={`/characters/${character.id}`}>{character.name}</Link> — {character.campaign?.name ?? 'No campaign'}
+                  </li>
+                ))}
+            </ul>
+          </>
+        )}
+      </section>
+
+      <section>
+        <h2>NPCs</h2>
+        {!signedIn ? (
+          <p>Sign in to view NPCs.</p>
+        ) : busy ? (
+          <p>Loading NPCs…</p>
+        ) : error ? (
+          <InlineError>{error}</InlineError>
+        ) : (
+          <>
+            <p>
+              <Link href="/npcs">View all NPCs</Link>
+            </p>
+
+            {ownerCampaignIds.size ? (
+              <p>
+                <button type="button" onClick={() => router.push('/npcs/new')}>
+                  New NPC
+                </button>
+              </p>
+            ) : null}
+
+            <ul>
+              {(data?.characters ?? [])
+                .filter((c) => c.isPublic)
+                .map((npc) => (
+                  <li key={npc.id}>
+                    <Link href={`/characters/${npc.id}`}>{npc.name}</Link>
+                  </li>
+                ))}
             </ul>
           </>
         )}
       </section>
     </>
-  );
-}
-
-function InviteForm(props: { disabled: boolean; onSend: (email: string) => void }) {
-  const [email, setEmail] = React.useState('');
-
-  return (
-    <form
-      onSubmit={(e) => {
-        e.preventDefault();
-        props.onSend(email);
-        setEmail('');
-      }}
-      style={{ marginTop: 8 }}
-    >
-      <label>
-        Invite email
-        <input value={email} onChange={(e) => setEmail(e.target.value)} disabled={props.disabled} />
-      </label>
-      <button type="submit" disabled={props.disabled || !email.trim()}>
-        {props.disabled ? 'Sending…' : 'Send invite'}
-      </button>
-    </form>
   );
 }
