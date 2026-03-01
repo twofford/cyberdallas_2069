@@ -1,7 +1,7 @@
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 
-import { verifyAuthToken } from '@/graphql/auth';
+import { verifyAuthToken } from '@/server/graphql/auth';
 
 export default async function IndexPage() {
   const secret = process.env.AUTH_SECRET;

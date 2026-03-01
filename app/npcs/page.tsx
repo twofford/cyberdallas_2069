@@ -1,8 +1,8 @@
 import * as React from 'react';
 import Link from 'next/link';
 
-import { RequireAuth } from '../RequireAuth';
-import { SessionPanel } from '../SessionPanel';
+import { RequireAuth } from '../_components/RequireAuth';
+import { SessionPanel } from '../_components/SessionPanel';
 import { NpcsClient } from './NpcsClient';
 
 export default async function NpcsPage() {

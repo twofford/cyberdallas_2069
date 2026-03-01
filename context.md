@@ -4,7 +4,7 @@ We are creating a web app for a cyberpunk tabletop role-playing game. Users shou
 
 ## Instructions
 
-- At the beginning of each session, read this entire file and do everything it says. Then read the reference documents (rules.md, prompts.md) before responding to any prompts.
+- At the beginning of each session, read this entire file and do everything it says.
 
 - Each time I prompt you, write a short summary of my prompt and your response, along with a timestamp, to prompts.md. The prompt summary should explain what I’m asking you to do (the task/intent). Even if I say something brief like “yes” or “do that,” your summary should expand it into the concrete work you’re proceeding with.
 
@@ -12,7 +12,7 @@ We are creating a web app for a cyberpunk tabletop role-playing game. Users shou
 
 - Exception: Do not append entries to prompts.md for meta/process prompts like “Are you stuck?”
 
-- Each time we being a new context window, indicate that in your log to prompts.md.
+- Each time we begin a new context window, indicate that in your log to prompts.md.
 
 - Write tests before you write any code. Make sure the tests fail for the correct reason. Then write the code and ensure it passes. Write both Vitest and Playwright tests where applicable.
 
@@ -24,8 +24,6 @@ We are creating a web app for a cyberpunk tabletop role-playing game. Users shou
 
 - Keep the running todo list in todos.md at the repo root. Append new todos to the bottom; when completed, check them off in-place (do not reorder or delete old items).
 
-- Do not add “append to prompts.md” tasks to todos.md. prompts.md logging is required, but it is not tracked as a todo.
-
 - Do not edit rules.md.
 
 - Review plans located at plans/*.prompt.md for detailed breakdowns of larger tasks before starting work on them. If you are working on a task that has a plan, keep the plan open in another window and refer to it as you work.
@@ -34,6 +32,9 @@ We are creating a web app for a cyberpunk tabletop role-playing game. Users shou
 
 - Invite emails use `APP_BASE_URL` to build links; keep it aligned with the dev server port you run on (commonly 3001 in this repo).
 - To trigger a real invite email without using the UI, run `npm run email:test-invite` (see `.env.example` for required SMTP env vars).
+- Global terminal button styling adds bracket pseudo-content (`[ ... ]`), which can affect Playwright accessible-name matching. Prefer regex/non-exact role selectors for button names in E2E tests.
+- If Next.js dev shows `Runtime ChunkLoadError` for an app route chunk, do a hard refresh; if it persists, stop dev server, delete `.next`, and restart to rebuild chunk manifests cleanly.
+- For dashboard/list route action buttons, prefer `window.location.assign(...)` over client `router.push(...)` when chunk-transition failures are observed in dev.
 
 ## Reference Documents (read these before responding)
 

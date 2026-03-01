@@ -1,6 +1,6 @@
 import Link from 'next/link';
 
-import { RequireAuth } from '../../RequireAuth';
+import { RequireAuth } from '../../_components/RequireAuth';
 import { NewCharacterPageClient } from './NewCharacterPageClient';
 
 export default function NewCharacterPage() {

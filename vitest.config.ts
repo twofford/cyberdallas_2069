@@ -9,8 +9,8 @@ export default defineConfig({
   },
   test: {
     environment: 'node',
-    include: ['src/**/*.test.ts'],
-    setupFiles: ['src/test/vitest.setup.ts'],
+    include: ['tests/**/*.test.ts'],
+    setupFiles: ['tests/setup/vitest.setup.ts'],
   },
 });
 

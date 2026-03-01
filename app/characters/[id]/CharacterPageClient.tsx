@@ -532,7 +532,7 @@ export function CharacterPageClient(props: { characterId: string }) {
   return (
     <>
       <h3>{character.name}</h3>
-      <p>{character.campaign?.name ?? (character.isPublic ? 'Archetype' : 'No campaign')}</p>
+      <p>{character.campaign?.name ?? (character.isPublic ? 'NPC' : 'No campaign')}</p>
 
       {character.canEdit ? (
         <p>
@@ -611,7 +611,7 @@ export function CharacterPageClient(props: { characterId: string }) {
               ]}
               onChange={setDraftCampaignId}
             />
-            {character.isPublic ? <p>Public archetypes can’t belong to a campaign.</p> : null}
+            {character.isPublic ? <p>Public NPCs can’t belong to a campaign.</p> : null}
           </section>
 
           <section>

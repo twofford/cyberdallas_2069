@@ -30,7 +30,7 @@ Centralize the repeated client GraphQL POST helper, session (“Me”) fetching 
    - Do not change [app/home/page.tsx](app/home/page.tsx) server-side Yoga usage except to optionally extract a server helper later; focus this pass on client-side dedupe.
 
 **Verification**
-- Run unit tests: `npm test` (or the repo’s configured Vitest command) and ensure snapshots/DOM assertions still match for layout-related tests under [src/app](src/app).
+- Run unit tests: `npm test` (or the repo’s configured Vitest command) and ensure snapshots/DOM assertions still match for layout-related tests under [tests/contracts/app](tests/contracts/app).
 - Run e2e smoke: `npx playwright test` (at least auth + invite flows in [e2e](e2e)).
 - Manual checks:
   - Login/logout updates session UI everywhere (panels + private dashboard).

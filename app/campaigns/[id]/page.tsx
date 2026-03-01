@@ -1,10 +1,10 @@
 import Link from 'next/link';
 
-import { RequireAuth } from '../../RequireAuth';
+import { RequireAuth } from '../../_components/RequireAuth';
 import { CampaignPageClient } from './CampaignPageClient';
 
-export default async function CampaignPage(props: { params: { id: string } | Promise<{ id: string }> }) {
-  const params = await Promise.resolve(props.params);
+export default async function CampaignPage(props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
 
   return (
     <RequireAuth>

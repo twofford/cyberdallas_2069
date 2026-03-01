@@ -2,7 +2,7 @@
 
 import * as React from 'react';
 
-import { AuthPanel } from '../AuthPanel';
+import { AuthPanel } from '../_components/AuthPanel';
 
 export function AuthPageClient() {
   return (

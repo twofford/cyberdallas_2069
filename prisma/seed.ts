@@ -7,7 +7,7 @@ import {
   items,
   vehicles,
   weapons,
-} from '../src/graphql/seed';
+} from '../src/server/graphql/seed';
 
 const prisma = new PrismaClient();
 
@@ -29,6 +29,8 @@ async function main() {
         longDescription: cybernetic.longDescription,
         price: cybernetic.price,
         batteryLife: cybernetic.batteryLife,
+        ownerId: cybernetic.ownerId ?? null,
+        campaignId: cybernetic.campaignId ?? null,
       },
       create: {
         id: cybernetic.id,
@@ -37,6 +39,8 @@ async function main() {
         longDescription: cybernetic.longDescription,
         price: cybernetic.price,
         batteryLife: cybernetic.batteryLife,
+        ownerId: cybernetic.ownerId ?? null,
+        campaignId: cybernetic.campaignId ?? null,
       },
     });
   }
@@ -54,6 +58,8 @@ async function main() {
         condition: weapon.condition,
         shortDescription: weapon.shortDescription,
         longDescription: weapon.longDescription,
+        ownerId: weapon.ownerId ?? null,
+        campaignId: weapon.campaignId ?? null,
       },
       create: {
         id: weapon.id,
@@ -66,6 +72,8 @@ async function main() {
         condition: weapon.condition,
         shortDescription: weapon.shortDescription,
         longDescription: weapon.longDescription,
+        ownerId: weapon.ownerId ?? null,
+        campaignId: weapon.campaignId ?? null,
       },
     });
   }
@@ -80,6 +88,8 @@ async function main() {
         shortDescription: item.shortDescription,
         longDescription: item.longDescription,
         type: ItemType[item.type],
+        ownerId: item.ownerId ?? null,
+        campaignId: item.campaignId ?? null,
       },
       create: {
         id: item.id,
@@ -89,6 +99,8 @@ async function main() {
         shortDescription: item.shortDescription,
         longDescription: item.longDescription,
         type: ItemType[item.type],
+        ownerId: item.ownerId ?? null,
+        campaignId: item.campaignId ?? null,
       },
     });
   }
@@ -103,6 +115,8 @@ async function main() {
         longDescription: vehicle.longDescription,
         speed: vehicle.speed,
         armor: vehicle.armor,
+        ownerId: vehicle.ownerId ?? null,
+        campaignId: vehicle.campaignId ?? null,
       },
       create: {
         id: vehicle.id,
@@ -112,6 +126,8 @@ async function main() {
         longDescription: vehicle.longDescription,
         speed: vehicle.speed,
         armor: vehicle.armor,
+        ownerId: vehicle.ownerId ?? null,
+        campaignId: vehicle.campaignId ?? null,
       },
     });
   }

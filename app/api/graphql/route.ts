@@ -1,4 +1,4 @@
-import { createYogaServer } from '@/graphql/yoga';
+import { createYogaServer } from '@/server/graphql/yoga';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';

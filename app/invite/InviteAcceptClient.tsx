@@ -3,14 +3,14 @@
 import * as React from 'react';
 import { useSearchParams } from 'next/navigation';
 
-import { AuthPanel } from '../AuthPanel';
+import { AuthPanel } from '../_components/AuthPanel';
 
 import { graphqlFetch as graphQLFetch } from '../lib/graphqlFetch';
 import { useMe } from '../lib/useMe';
 
 export function InviteAcceptClient() {
   const searchParams = useSearchParams();
-  const tokenFromUrl = searchParams.get('token');
+  const tokenFromUrl = searchParams?.get('token') ?? null;
 
   const { me, error: meError } = useMe();
   const signedIn = Boolean(me);

@@ -299,3 +299,51 @@
 
 - Prompt (2026-02-16): “Let's add a money fields to the characters model.”
 - Response: Added `money` (Int, default 0) to the Character model end-to-end: Prisma schema + migration, seed data + Prisma seed, datasource mapping/selects, GraphQL `Character.money`, and the character edit UI (view + edit + updateCharacter support). Added unit coverage verifying money updates persist; `npm test` remains green.
+
+- Context Window (2026-02-18 02:00 UTC): New context window started.
+
+- Prompt (2026-02-18 02:00 UTC): Add full player CRUD for cybernetics/items/weapons/vehicles with dedicated create/edit pages like characters/campaigns, enforcing that only creators can edit/delete by default, with campaign OWNER and ADMIN override permissions.
+- Response: Added tests-first coverage (Vitest + Playwright) for catalog CRUD/authorization, extended Prisma schema+migration+seed and datasource auth logic (in-memory + Prisma) with owner/campaign metadata, implemented GraphQL catalog create/update/delete mutations plus `canEdit`/campaign fields, added dedicated `/cybernetics|items|weapons|vehicles/new` pages and edit/delete controls on each detail page, added dashboard links to create these entities, regenerated Prisma client, and validated with `npm test` and targeted e2e catalog specs.
+
+- Prompt (2026-02-18 02:13 UTC): Read context.md first, then change the dashboard so the “New cybernetic”, “New item”, “New weapon”, and “New vehicle” controls are buttons like the existing “New campaign” and “New character” actions.
+- Response: Followed context/rules docs first, updated tests before code (Vitest + Playwright) to assert button-based catalog creation actions, added a reusable `RouteButton` client component, replaced the four catalog “New …” links on `app/home/page.tsx` with button navigation, adjusted Playwright selectors to account for the terminal-style bracketed button labels, and verified with `npm test -- src/app/homePage.test.ts`, `npm run test:e2e -- e2e/catalogCrud.spec.ts`, and full `npm test`.
+
+- Prompt (2026-02-18 02:26 UTC): Reported that clicking the dashboard “New NPC” button triggers a Next.js Runtime ChunkLoadError for `app/npcs/new/page` on localhost:3001, and asked for a fix.
+- Response: Read required context docs, added tests first (new Vitest route render test and a new targeted Playwright flow that clicks “New NPC”), reproduced a failing Playwright assertion path, then implemented a defensive navigation fix by changing the New NPC action to `window.location.assign('/npcs/new')` to avoid client chunk-transition failures, added a small React import compatibility fix in `app/npcs/new/page.tsx` for Vitest SSR rendering, updated the Playwright assertion to match terminal-prefixed accessible names, and verified with `npm test -- src/app/newNpcPage.test.ts`, `npm run test:e2e -- e2e/auth.spec.ts --grep "campaign owners can open the new NPC page from dashboard"`, and full `npm test`.
+
+- Context Window (2026-03-01 05:11 UTC): New context window started.
+
+- Prompt (2026-03-01 05:11 UTC): "In the main dashboard, instead of listing campaigns, characters, etc., create a new page for each of those things... Do that for each entity type."
+- Response: Added tests-first coverage for the new dashboard navigation model (Vitest + a dedicated Playwright spec), then refactored the dashboard to remove inline entity lists and replace them with action buttons (`View ...` plus existing `New ...`). Added dedicated list routes for campaigns, characters, cybernetics, weapons, items, and vehicles (with per-route list rendering and links to detail pages), kept NPCs on `/npcs` with a dashboard `View NPCs` button, and re-ran the targeted unit/E2E specs to green.
+
+- Prompt (2026-03-01 05:11 UTC): "Start by reading context.md."
+- Response: Read `context.md` immediately, then loaded the required reference docs (`rules.md`, `prompts.md`, `todos.md`, `scripts.md`) before proceeding with implementation.
+
+- Prompt (2026-03-01 05:21 UTC): "Remove the view NPCs button from the characters page"
+- Response: Updated the characters index page UI to remove the `View NPCs` dashboard action, leaving only the `New character` action in that section.
+
+- Prompt (2026-03-01 05:26 UTC): "On the dashboard, the View NPCs and New NPC buttons are stacked. They should be side by side like the rest."
+- Response: Added tests-first coverage (Vitest + targeted Playwright assertion) to require both NPC actions in a single row, then updated the dashboard NPC section to render `View NPCs` and `New NPC` inline in the same action paragraph when NPC creation is allowed; re-ran the targeted unit and E2E tests to green.
+
+- Prompt (2026-03-01 05:29 UTC): "The New NPC button should be first (to the left) and the View NPCs button should be second (to the right)"
+- Response: Added tests-first assertions (Vitest + targeted Playwright) requiring NPC action order as `New NPC` then `View NPCs`, updated the dashboard NPC actions markup to render in that order on the same row, and re-ran the targeted tests to green.
+
+- Prompt (2026-03-01 05:35 UTC): Reported runtime error when clicking "View NPCs": `ENOENT ... .next/server/pages/_document.js` (Next 15.5.12).
+- Response: Added tests-first coverage to require Next pages fallback source files (`pages/_app.tsx`, `pages/_document.tsx`, `pages/_error.tsx`), implemented those minimal files to stabilize runtime fallback generation, and re-ran targeted unit + Playwright dashboard navigation tests to confirm `View NPCs` flow passes.
+
+- Prompt (2026-03-01 05:43 UTC): "Don't show archetypes in the View Characters page. Only show those in the NPCs page. Also, rename Archetypes to NPCs."
+- Response: Added tests-first coverage (Vitest + targeted Playwright) for character/NPC list separation and terminology, updated the Characters page list to exclude public NPC records, kept public NPCs visible on the NPCs page, and replaced visible UI labels from "Archetype" to "NPC" (character detail label, campaign-assignment warning, and new-character public toggle text). Updated targeted Playwright flows to assert public NPCs are hidden on `/characters` and visible on `/npcs`, then re-ran targeted unit + E2E tests to green.
+
+- Prompt (2026-03-01 17:46 UTC): "All the checkboxes are misaligned... use the same styling as the custom selects so they don't appear like generic checkboxes in the browser."
+- Response: Added tests-first coverage for checkbox alignment/styling, updated character-creation checkbox labels to opt into inline row layout, and introduced custom terminal checkbox styling in global CSS (appearance reset + custom check mark + focus/disabled states) to match the app's custom control style. Verified with targeted Vitest tests and a targeted Playwright flow that interacts with the public-NPC checkbox.
+
+- Context Window (2026-03-01 17:52 UTC): New context window started.
+
+- Prompt (2026-03-01 17:52 UTC): Read `context.md` first, then fix a Next.js `Runtime ChunkLoadError` at `/campaigns` (`Loading chunk app/campaigns/page failed`) on localhost:3001.
+- Response: Read the required context/reference docs first, verified `/campaigns` and its chunk endpoint behavior, added a failing Vitest regression for navigation strategy, updated `RouteButton` to use full-page navigation via `window.location.assign(href)` to avoid client chunk-transition failures, and re-ran targeted checks (`npm test -- src/app/routeButtonNavigation.test.ts` and `npm run test:e2e -- e2e/dashboardViewPages.spec.ts`) to green.
+
+- Prompt (2026-03-01 17:56 UTC): The long description fields (cybernetics, weapons, items, vehicles) are styled differently from other inputs; fix the mismatch everywhere.
+- Response: Added a failing CSS regression test to require terminal-themed textarea selectors, then updated global styles so `textarea` shares the same font/border/background/focus treatment as other inputs (plus vertical resize + consistent height). Verified with `npm test -- src/app/globalsCss.test.ts`.
+
+- Prompt (2026-03-01 18:15 UTC): "PLEASE IMPLEMENT THIS PLAN" to execute the incremental repo streamlining refactor (move server code to `src/server/*`, centralize Vitest tests under `tests/*`, move shared app components under `app/_components/*`, update all imports/configs, and run verification including unit/build/E2E smoke checks).
+- Response: Implemented the full restructure in phases: moved GraphQL/auth/data source + db/email runtime modules to `src/server/*`, updated app/runtime imports from `@/graphql/*` to `@/server/graphql/*`, relocated Vitest suites/setup from `src/**` to `tests/{contracts,integration,unit,setup}` with path rewrites and `vitest.config.ts` include/setup updates, moved shared app components into `app/_components/*` and rewired all consuming routes/tests, updated `prisma/seed.ts` import to the new seed path, applied optional docs cleanup in `plans/dryUpReactComponents.prompt.md`, removed now-empty legacy test/source dirs, and verified with targeted + full Vitest runs (all passing), `npm run build` (passes with `CYBERDALLAS_DATA_SOURCE=inMemory`; default build still depends on local Postgres availability), and E2E smoke runs (`e2e/invite.spec.ts` passed; `e2e/auth.spec.ts` ran and reported existing flow failures unrelated to the structural moves).

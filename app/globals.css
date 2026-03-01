@@ -143,7 +143,8 @@ body[data-ui='cyberdallas'] label {
   margin-top: 10px;
 }
 
-body[data-ui='cyberdallas'] input {
+body[data-ui='cyberdallas'] input,
+body[data-ui='cyberdallas'] textarea {
   font: inherit;
   padding: 10px 12px;
   border-radius: 0;
@@ -151,6 +152,57 @@ body[data-ui='cyberdallas'] input {
   background: Canvas;
   color: CanvasText;
   caret-color: Highlight;
+}
+
+body[data-ui='cyberdallas'] textarea {
+  min-height: 132px;
+  resize: vertical;
+}
+
+body[data-ui='cyberdallas'] label[data-checkbox='true'] {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+body[data-ui='cyberdallas'] input[type='checkbox'] {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  margin: 0;
+  border-radius: 0;
+  border: 1px solid color-mix(in srgb, CanvasText 25%, transparent);
+  background: Canvas;
+  color: CanvasText;
+  display: inline-grid;
+  place-content: center;
+  cursor: pointer;
+}
+
+body[data-ui='cyberdallas'] input[type='checkbox']::before {
+  content: '';
+  width: 9px;
+  height: 9px;
+  background: color-mix(in srgb, CanvasText 82%, Canvas);
+  transform: scale(0);
+  transition: transform 110ms ease-out;
+}
+
+body[data-ui='cyberdallas'] input[type='checkbox']:checked::before {
+  transform: scale(1);
+}
+
+body[data-ui='cyberdallas'] input[type='checkbox']:focus-visible {
+  outline: 2px solid Highlight;
+  outline-offset: 1px;
+}
+
+body[data-ui='cyberdallas'] input[type='checkbox']:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 body[data-ui='cyberdallas'] select {
@@ -170,7 +222,8 @@ body[data-ui='cyberdallas'] optgroup {
   color: CanvasText;
 }
 
-body[data-ui='cyberdallas'] input:focus {
+body[data-ui='cyberdallas'] input:focus,
+body[data-ui='cyberdallas'] textarea:focus {
   outline: 2px solid Highlight;
   outline-offset: 1px;
 }

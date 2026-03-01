@@ -3,7 +3,7 @@ import * as React from 'react';
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 
-import { verifyAuthToken } from '@/graphql/auth';
+import { verifyAuthToken } from '@/server/graphql/auth';
 
 import { AuthPageClient } from './AuthPageClient';
 

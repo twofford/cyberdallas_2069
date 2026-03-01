@@ -25,6 +25,10 @@ model User {
   campaignMemberships CampaignMembership[]
   acceptedCampaignInvites CampaignInvite[] @relation("AcceptedInvites")
   characters   Character[]
+  cybernetics  Cybernetic[]
+  weapons      Weapon[]
+  items        Item[]
+  vehicles     Vehicle[]
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 }
@@ -34,6 +38,10 @@ model Campaign {
   name       String
   startingMoney Int      @default(0)
   characters Character[]
+  cybernetics Cybernetic[]
+  weapons    Weapon[]
+  items      Item[]
+  vehicles   Vehicle[]
   memberships CampaignMembership[]
   invites    CampaignInvite[]
   createdAt  DateTime    @default(now())
@@ -117,10 +125,19 @@ model Cybernetic {
   price            Int
   batteryLife      Int
 
+  campaignId String?
+  campaign   Campaign? @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+
+  ownerId String?
+  owner   User? @relation(fields: [ownerId], references: [id], onDelete: SetNull)
+
   characters CharacterCybernetic[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@index([campaignId])
+  @@index([ownerId])
 }
 
 model Weapon {
@@ -135,10 +152,19 @@ model Weapon {
   shortDescription String
   longDescription  String
 
+  campaignId String?
+  campaign   Campaign? @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+
+  ownerId String?
+  owner   User? @relation(fields: [ownerId], references: [id], onDelete: SetNull)
+
   characters CharacterWeapon[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@index([campaignId])
+  @@index([ownerId])
 }
 
 enum WeaponType {
@@ -155,10 +181,19 @@ model Item {
   shortDescription String
   longDescription  String
 
+  campaignId String?
+  campaign   Campaign? @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+
+  ownerId String?
+  owner   User? @relation(fields: [ownerId], references: [id], onDelete: SetNull)
+
   characters CharacterItem[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@index([campaignId])
+  @@index([ownerId])
 }
 
 enum ItemType {
@@ -178,10 +213,19 @@ model Vehicle {
   speed            Int
   armor            Int
 
+  campaignId String?
+  campaign   Campaign? @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+
+  ownerId String?
+  owner   User? @relation(fields: [ownerId], references: [id], onDelete: SetNull)
+
   characters CharacterVehicle[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@index([campaignId])
+  @@index([ownerId])
 }
 
 model CharacterCybernetic {

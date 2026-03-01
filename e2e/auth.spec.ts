@@ -149,6 +149,36 @@ test('dashboard catalog links navigate to detail pages', async ({ page }) => {
   await expect(page.getByRole('heading', { name: 'Street Bike' })).toBeVisible();
 });
 
+test('campaign owners can open the new NPC page from dashboard', async ({ page }) => {
+  const email = `nav-npc+${Date.now()}@example.com`;
+  const password = 'correct-horse-battery-staple';
+
+  await page.goto('/auth');
+  await switchToRegister(page);
+
+  const registerForm = page.locator('form', { has: page.getByRole('heading', { name: 'Register' }) });
+  await registerForm.getByLabel('Email').fill(email);
+  await registerForm.getByLabel('Password').fill(password);
+  await registerForm.getByRole('button', { name: 'Register', exact: true }).click();
+
+  await expect(page).toHaveURL('/home');
+
+  await joinCampaignBackdoor({ request: page.request, campaignId: 'camp_2' });
+  await page.reload();
+
+  const npcsSection = page.locator('section', { has: page.getByRole('heading', { name: 'NPCs' }) });
+  const npcActionsRow = npcsSection
+    .locator('p', { has: page.getByRole('button', { name: /new npc/i }) })
+    .filter({ has: page.getByRole('button', { name: /view npcs/i }) });
+  await expect(npcActionsRow).toHaveCount(1);
+  await expect(npcActionsRow).toContainText(/new npc[\s\S]*view npcs/i);
+
+  await page.getByRole('button', { name: /new npc/i }).click();
+  await expect(page).toHaveURL('/npcs/new');
+  await expect(page.getByRole('heading', { name: /new npc/i })).toBeVisible();
+  await expect(page.locator('form').getByRole('button', { name: /create character/i })).toBeVisible();
+});
+
 test('users can create new characters in their campaigns', async ({ page }) => {
   const email = `create-char+${Date.now()}@example.com`;
   const password = 'correct-horse-battery-staple';
@@ -295,7 +325,7 @@ test('users can edit their characters from the character page', async ({ page })
   await expect(page.getByText('Cyberdeck (Starter)')).toBeVisible();
 });
 
-test('campaign owners can create public archetypes visible to other users', async ({ page }) => {
+test('campaign owners can create public NPCs visible to other users via NPCs page only', async ({ page }) => {
   const ownerEmail = `gm+${Date.now()}@example.com`;
   const playerEmail = `player+${Date.now()}@example.com`;
   const password = 'correct-horse-battery-staple';
@@ -309,20 +339,15 @@ test('campaign owners can create public archetypes visible to other users', asyn
   await registerForm.getByRole('button', { name: 'Register', exact: true }).click();
   await expect(page).toHaveURL('/home');
 
-  // Become owner of a campaign so the public archetype toggle is available.
+  // Become owner of a campaign so the public NPC toggle is available.
   await joinCampaignBackdoor({ request: page.request, campaignId: 'camp_5' });
   await page.reload();
-
-  const campaignsSection = page.locator('section', { has: page.getByRole('heading', { name: 'Campaigns' }) });
-  await expect(campaignsSection.getByText('Ghost Protocol')).toBeVisible();
-  // Owner-only: invite form should be present.
-  await expect(campaignsSection.getByLabel('Invite email')).toBeVisible();
 
   await page.getByRole('button', { name: /new character/i }).click();
   await expect(page).toHaveURL(/\/characters\/new$/);
 
-  await page.getByLabel('Name', { exact: true }).fill('Public Archetype');
-  const publicLabel = page.locator('label', { hasText: 'Public archetype (visible to all players)' });
+  await page.getByLabel('Name', { exact: true }).fill('Public NPC');
+  const publicLabel = page.locator('label', { hasText: 'Public NPC (visible to all players)' });
   await expect(publicLabel).toBeVisible();
   await publicLabel.locator('input[type="checkbox"]').check();
 
@@ -331,10 +356,10 @@ test('campaign owners can create public archetypes visible to other users', asyn
   await createButton.click();
 
   await expect(page).toHaveURL(/\/characters\//);
-  await expect(page.getByRole('heading', { name: /public archetype/i })).toBeVisible();
-  await expect(page.getByText('Archetype', { exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /public npc/i })).toBeVisible();
+  await expect(page.getByText('NPC', { exact: true })).toBeVisible();
 
-  // Sign out and register a different user; the public archetype should be visible.
+  // Sign out and register a different user; the public NPC should be visible only on the NPCs page.
   await page.goto('/home');
   await page.getByRole('button', { name: /sign out/i }).click();
 
@@ -346,8 +371,16 @@ test('campaign owners can create public archetypes visible to other users', asyn
   await registerForm2.getByRole('button', { name: 'Register', exact: true }).click();
 
   await expect(page).toHaveURL('/home');
-  const charactersSection = page.locator('section', { has: page.getByRole('heading', { name: 'Characters' }) });
-  await expect(charactersSection.getByRole('link', { name: 'Public Archetype', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: /view characters/i }).click();
+  await expect(page).toHaveURL('/characters');
+  await expect(page.getByRole('link', { name: 'Public NPC', exact: true })).toHaveCount(0);
+
+  await page.getByRole('link', { name: /back to home/i }).click();
+  await expect(page).toHaveURL('/home');
+
+  await page.getByRole('button', { name: /view npcs/i }).click();
+  await expect(page).toHaveURL('/npcs');
+  await expect(page.getByRole('link', { name: 'Public NPC', exact: true })).toBeVisible();
 });
 
 test('login and register forms do not share input state', async ({ page }) => {

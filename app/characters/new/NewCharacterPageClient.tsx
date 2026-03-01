@@ -320,7 +320,7 @@ export function NewCharacterPageClient(props: { mode?: 'character' | 'npc' } = {
           />
 
           {canCreatePublicArchetype ? (
-            <label>
+            <label data-checkbox="true">
               <input
                 type="checkbox"
                 checked={isPublicArchetype}
@@ -331,7 +331,7 @@ export function NewCharacterPageClient(props: { mode?: 'character' | 'npc' } = {
                 }}
                 disabled={busy}
               />
-              Public archetype (visible to all players)
+              Public NPC (visible to all players)
             </label>
           ) : null}
         </>
@@ -612,7 +612,7 @@ export function NewCharacterPageClient(props: { mode?: 'character' | 'npc' } = {
       {cybernetics.length ? (
         <div>
           {cybernetics.map((c) => (
-            <label key={c.id}>
+            <label key={c.id} data-checkbox="true">
               <input
                 type="checkbox"
                 checked={cyberneticIds.has(c.id)}
@@ -631,7 +631,7 @@ export function NewCharacterPageClient(props: { mode?: 'character' | 'npc' } = {
       {weapons.length ? (
         <div>
           {weapons.map((w) => (
-            <label key={w.id}>
+            <label key={w.id} data-checkbox="true">
               <input
                 type="checkbox"
                 checked={weaponIds.has(w.id)}
@@ -650,7 +650,7 @@ export function NewCharacterPageClient(props: { mode?: 'character' | 'npc' } = {
       {items.length ? (
         <div>
           {items.map((it) => (
-            <label key={it.id}>
+            <label key={it.id} data-checkbox="true">
               <input
                 type="checkbox"
                 checked={itemIds.has(it.id)}
@@ -669,7 +669,7 @@ export function NewCharacterPageClient(props: { mode?: 'character' | 'npc' } = {
       {vehicles.length ? (
         <div>
           {vehicles.map((v) => (
-            <label key={v.id}>
+            <label key={v.id} data-checkbox="true">
               <input
                 type="checkbox"
                 checked={vehicleIds.has(v.id)}

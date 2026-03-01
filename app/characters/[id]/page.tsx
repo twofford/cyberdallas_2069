@@ -2,11 +2,11 @@ import * as React from 'react';
 
 import Link from 'next/link';
 
-import { RequireAuth } from '../../RequireAuth';
+import { RequireAuth } from '../../_components/RequireAuth';
 import { CharacterPageClient } from './CharacterPageClient';
 
-export default async function CharacterPage(props: { params: { id: string } | Promise<{ id: string }> }) {
-  const params = await Promise.resolve(props.params);
+export default async function CharacterPage(props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   return (
     <RequireAuth>
       <main style={{ padding: 24 }}>
